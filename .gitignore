@@ -1,0 +1,6 @@
+db/*.db
+data/*.csv
+dashboard/report.html
+__pycache__/
+*.pyc
+.DS_Store

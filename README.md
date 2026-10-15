@@ -26,6 +26,7 @@ numbers3-db/
 │   ├── scrape_update.py   # Web取得による更新（numbers-renban.tokyo、フォールバック用）
 │   ├── update_data.py     # 自動更新の窓口（mk-mode CSV優先、失敗時scrape_update.pyへフォールバック）
 │   ├── analyze.py         # 出現回数・経過回数のテキスト一覧（ターミナル確認用）
+│   ├── predict.py         # 平均当選間隔フィルタによる予想候補／除外の抽出・ピックアップ履歴保存
 │   └── build_report.py    # ダッシュボードHTML（dashboard/report.html）を生成
 ├── dashboard/
 │   ├── report.html         # build_report.py の生成物（Artifactとして公開するファイル）
@@ -62,6 +63,15 @@ Akamai WAFにより403 Forbiddenでブロックされた（curl・WebFetch双方
   - `source`: `'csv_import'` または `'scrape'`（データの出所を追跡）
 - `v_number_stats` ビュー: ストレート番号ごとの出現回数・最終当せん日・経過日数
 - `v_box_stats` ビュー: ボックス番号（桁の組合せ）ごとの同上
+- `v_number_gaps` / `v_number_intervals` ビュー: ストレート番号ごとの当せん間隔（回号差）と平均間隔（`avg_interval`）
+- `v_box_gaps` / `v_box_intervals` ビュー: ボックス番号版の同上
+- `v_digit_appearances` / `v_digit_gaps` / `v_digit_stats` / `v_digit_intervals` ビュー: 0〜9の1桁ごとの
+  出現間隔（桁位置を区別せず、3桁のどこかにその数字が含まれていれば出現とみなす）。
+  参考: [umasaku.com「ナンバーズ3の当選番号の出現間隔・出現頻度の分析」](https://blog.umasaku.com/loto/numbers3-num-freq/)
+- `pickups` テーブル: 「今日のピックアップ数字」の履行履歴（`based_on_draw_no`時点のデータで算出、
+  対象は`based_on_draw_no+1`回）。`predict.py --mode pickup` / `build_report.py` 実行時に自動保存
+- `v_pickup_results` ビュー: `pickups`と`draws`を結合し、対象回が抽せん済みなら
+  ストレート的中（`straight_hit`）／ボックス一致（`box_hit`）を自動判定（未抽せんはNULL）
 
 ## 使い方
 
@@ -114,6 +124,30 @@ python3 scripts/analyze.py --mode box --top 50 --min-count 3
 第1位: 当選数字「355」
   内訳：当選回数：18回、最終当選回：第6878回（2025年12月15日）、最終当選回から213回経過
 ```
+
+### 予想候補の抽出（平均間隔フィルタ）
+```bash
+python3 scripts/predict.py                       # ストレート、上位10件
+python3 scripts/predict.py --mode box --top 20
+python3 scripts/predict.py --mode digit --top 10  # 0〜9の1桁ごと
+```
+番号ごとに「同じ番号が当せんする平均間隔（回数）」を算出し、最終当せん回からの経過回数が
+その平均間隔に達していない番号を「除外」、達している番号を「候補」として分けて表示する。
+出現回数が1回以下（間隔のサンプルが無い）の番号は判定不能のため除外せず候補側に残す。
+ダッシュボード（`build_report.py`）の「ストレート当選傾向」にも候補／除外のバッジとして反映される。
+この判定も出現頻度と同様、過去の実績に基づくサンプリング変動の可視化であり当せんの予測ではない。
+
+### 今日のピックアップ数字（ストレート候補 × 1桁候補の両条件）
+```bash
+python3 scripts/predict.py --mode pickup --top 10
+```
+「ストレート当選傾向」の候補（平均間隔以上経過）かつ、構成する3桁すべてが「1桁の出現間隔」でも
+候補である番号を抽出する（両条件のAND、最大10件・満たない場合は少なくなる）。
+実行すると `pickups` テーブルに自動保存され（`build_report.py` 実行時も同様に保存される）、
+対象回（算出時点の最新回号+1）が後日抽せんされると `v_pickup_results` ビューで自動的に
+答え合わせ（ストレート的中／ボックス一致）ができる。ダッシュボードの「ピックアップ履行履歴」
+セクションにも反映される。同じ回号ベースで再実行した場合は上書き（同一データからの再算出は
+結果が変わらないため履歴は破壊されない）。
 
 ## 現在のデータ状況（2026-10-14時点で実行・検証済み）
 

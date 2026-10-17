@@ -99,6 +99,80 @@ def show_predict(conn, mode: str, label: str, number_label: str, top: int, min_c
         _print_entry(rank, entry, number_label, verb)
 
 
+def _get_popularity_classification(conn):
+    """各数字を「不人気」「普通」「人気」に分類（配当ベース）"""
+    from statistics import mean, stdev
+
+    # 各数字の平均配当を計算
+    results = conn.execute(
+        "SELECT number, straight_amount FROM draws ORDER BY draw_no"
+    ).fetchall()
+
+    number_payouts = {}
+    for number, amount in results:
+        if number not in number_payouts:
+            number_payouts[number] = []
+        number_payouts[number].append(amount)
+
+    # 全体の平均と標準偏差
+    all_payouts = [a for p in number_payouts.values() for a in p]
+    overall_avg = mean(all_payouts)
+    overall_stdev = stdev(all_payouts)
+
+    # 閾値
+    high_threshold = overall_avg + overall_stdev * 0.5
+    low_threshold = overall_avg - overall_stdev * 0.5
+
+    # 分類
+    classification = {}
+    for number, payouts in number_payouts.items():
+        avg = mean(payouts)
+        if avg >= high_threshold:
+            classification[number] = "不人気"
+        elif avg <= low_threshold:
+            classification[number] = "人気"
+        else:
+            classification[number] = "普通"
+
+    return classification
+
+
+def _get_high_payout_numbers(conn):
+    """配当が高い数字（不人気）を実データから計算"""
+    classification = _get_popularity_classification(conn)
+    return {num for num, pop in classification.items() if pop == "不人気"}
+
+
+# キャッシュ用のグローバル変数
+_popularity_cache = {}
+
+def get_number_popularity(conn, number: str) -> str:
+    """指定された数字の人気度を返す（「不人気」「普通」「人気」）"""
+    global _popularity_cache
+    if not _popularity_cache:
+        _popularity_cache = _get_popularity_classification(conn)
+    return _popularity_cache.get(number, "普通")
+
+
+def get_pickup_candidates_high_yield(conn, min_count: int = MIN_COUNT_FOR_INTERVAL, top: int = 10):
+    """ストレート傾向で配当が高い数字（不人気）のみを候補に"""
+    straight_candidates, _straight_excluded, _ = get_candidates(conn, "straight", min_count)
+    digit_candidates, _digit_excluded, _ = get_candidates(conn, "digit", min_count)
+    digit_candidate_set = {int(e["key"]) for e in digit_candidates}
+
+    # 配当が高い数字（不人気）を取得
+    high_payout_numbers = _get_high_payout_numbers(conn)
+
+    # ストレート候補で、かつ配当が高い数字のみを選出
+    matched = [
+        e for e in straight_candidates
+        if e["key"] in high_payout_numbers and all(int(ch) in digit_candidate_set for ch in e["key"])
+    ]
+    matched.sort(key=lambda e: (-e["win_count"], e["last_win_draw_no"]))
+
+    return matched[:top], digit_candidate_set
+
+
 def get_pickup_candidates(conn, min_count: int = MIN_COUNT_FOR_INTERVAL, top: int = 10):
     """「ストレート当選傾向」の候補（平均間隔以上経過）かつ、その3桁すべてが
     「1桁の出現間隔」でも候補（平均間隔以上経過）である番号を抽出する（両条件のAND）。
@@ -114,6 +188,8 @@ def get_pickup_candidates(conn, min_count: int = MIN_COUNT_FOR_INTERVAL, top: in
     ]
     matched.sort(key=lambda e: (-e["win_count"], e["last_win_draw_no"]))
     return matched[:top], digit_candidate_set
+
+
 
 
 def save_pickup(conn, matched: list[dict], based_on_draw_no: int) -> None:

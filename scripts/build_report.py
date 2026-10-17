@@ -19,7 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from db_common import connect
 from analyze import format_date_ja
-from predict import get_candidates, get_pickup_candidates, save_pickup
+from predict import get_candidates, get_pickup_candidates, get_pickup_candidates_high_yield, save_pickup, get_number_popularity
 
 PICKUP_VISIBLE = 5
 PICKUP_EXPANDED = 30
@@ -240,6 +240,10 @@ table.history td.no{font-family:"IBM Plex Mono",monospace; color:var(--ink-mute)
 .note{margin-top:4px; padding:16px 20px 0; border-top:1px solid var(--rule);}
 .note p{margin:0; max-width:68ch; font-size:.78rem; color:var(--ink-mute); line-height:1.6;}
 
+.hl-id{font-family:"IBM Plex Mono",monospace; font-size:.85rem; color:var(--ink-mute); font-variant-numeric:tabular-nums; padding:8px;}
+.hl-num{font-family:"IBM Plex Mono",monospace; font-weight:600; font-size:1rem; color:var(--accent); font-variant-numeric:tabular-nums; padding:8px;}
+.hl-count{font-size:.85rem; color:var(--ink-dim); padding:8px;}
+
 @media (prefers-reduced-motion: reduce){ *{scroll-behavior:auto !important;} }
 </style>
 """
@@ -308,7 +312,8 @@ function setStraightMode(mode, btn){
 
 
 def chip_html(draw_no: int, draw_date: str, number: str,
-              prev_draw_no: int | None, prev_draw_date: str | None, gap: int | None) -> str:
+              prev_draw_no: int | None, prev_draw_date: str | None, gap: int | None,
+              straight_amount: int | None = None, popularity: str | None = None) -> str:
     if prev_draw_no is None:
         prev_html = '<div class="chip-prev">初当選（前回なし）</div>'
     else:
@@ -317,10 +322,24 @@ def chip_html(draw_no: int, draw_date: str, number: str,
             f'{format_date_ja(prev_draw_date)}<br>'
             f'<b>前回より{gap}回経過</b></div>'
         )
+
+    # 配当金額とバッジを生成
+    amount_badge = ""
+    if straight_amount:
+        amount_badge = f'<div style="font-size:.75rem; color:var(--accent); font-weight:600; margin-top:4px;">¥{straight_amount:,.0f}</div>'
+
+    popularity_badge = ""
+    if popularity == "不人気":
+        popularity_badge = '<span style="display:inline-block; font-size:.65rem; color:#4A90E2; background:color-mix(in srgb, #4A90E2 16%, transparent); border:1px solid color-mix(in srgb, #4A90E2 45%, transparent); padding:2px 6px; border-radius:3px; margin-top:4px;">不人気</span>'
+    elif popularity == "人気":
+        popularity_badge = '<span style="display:inline-block; font-size:.65rem; color:#F5A623; background:color-mix(in srgb, #F5A623 16%, transparent); border:1px solid color-mix(in srgb, #F5A623 45%, transparent); padding:2px 6px; border-radius:3px; margin-top:4px;">人気</span>'
+
     return f"""<div class="chip">
   <div class="chip-no">第{draw_no}回</div>
   <div class="chip-number">{number}</div>
   <div class="chip-date">{format_date_ja(draw_date)}</div>
+  {amount_badge}
+  {popularity_badge}
   {prev_html}
 </div>"""
 
@@ -428,7 +447,9 @@ def group_by_box_key(group: dict) -> dict:
     return by_box
 
 
-def today_pickup_table_html(group: dict, latest_draw_date: str) -> str:
+def today_pickup_table_html(group: dict, latest_draw_date: str, high_yield_set: set = None, conn = None) -> str:
+    if high_yield_set is None:
+        high_yield_set = set()
     """今日のピックアップ数字を順位付きで一覧表示し、セット購入でまとめてカバーできる
     組み合わせ（同じbox_keyを持つ候補どうし）があればヒントとして添える。
     """
@@ -445,11 +466,23 @@ def today_pickup_table_html(group: dict, latest_draw_date: str) -> str:
         partners = number_to_partners.get(picked_number)
         cover_badge = (f'<span class="badge badge-group">セットで{"・".join(partners)}もカバー</span>'
                         if partners else "")
+        high_yield_badge = (f'<span class="badge" style="color:#E8B34A; background:color-mix(in srgb, #E8B34A 16%, transparent); border:1px solid color-mix(in srgb, #E8B34A 45%, transparent);">高額対象</span>'
+                            if picked_number in high_yield_set else "")
+
+        # 人気度バッジを追加
+        popularity_badge = ""
+        if conn:
+            pop_level = get_number_popularity(conn, picked_number)
+            if pop_level == "不人気":
+                popularity_badge = '<span class="badge" style="color:#4A90E2; background:color-mix(in srgb, #4A90E2 16%, transparent); border:1px solid color-mix(in srgb, #4A90E2 45%, transparent);">不人気</span>'
+            elif pop_level == "人気":
+                popularity_badge = '<span class="badge" style="color:#F5A623; background:color-mix(in srgb, #F5A623 16%, transparent); border:1px solid color-mix(in srgb, #F5A623 45%, transparent);">人気</span>'
+
         rows.append(f"""<div class="row">
   <span class="rank">{rank:02d}</span>
   <span class="number">{picked_number}</span>
   <div class="row-detail">
-    <div class="row-stats"><b>{win_count}回</b>当選　平均間隔{avg_interval:.1f}回　{draws_elapsed}回経過で選出　<span class="badge badge-type">{digit_type_label(picked_number)}</span></div>
+    <div class="row-stats"><b>{win_count}回</b>当選　平均間隔{avg_interval:.1f}回　{draws_elapsed}回経過で選出　<span class="badge badge-type">{digit_type_label(picked_number)}</span>{popularity_badge}{high_yield_badge}</div>
   </div>
   {cover_badge}
 </div>""")
@@ -567,51 +600,169 @@ def history_row_html(draw_no: int, draw_date: str, number: str) -> str:
             f'<td class="num">{number}</td></tr>')
 
 
+def popularity_trend_summary_html(conn) -> str:
+    """人気度の最近の傾向をサマリー表示"""
+    try:
+        # 直近100回 vs 全期間での比較
+        stats_100 = conn.execute(
+            "SELECT category, percentage FROM popularity_stats WHERE metric_name = '直近100回' ORDER BY category"
+        ).fetchall()
+        stats_all = conn.execute(
+            "SELECT category, percentage FROM popularity_stats WHERE metric_name = '全期間' ORDER BY category"
+        ).fetchall()
+
+        if not stats_100 or not stats_all:
+            return ""
+
+        # カテゴリ別のパーセンテージを抽出
+        pct_100 = {cat: pct for cat, pct in stats_100}
+        pct_all = {cat: pct for cat, pct in stats_all}
+
+        # 差分を計算
+        diffs = {
+            cat: pct_100.get(cat, 0) - pct_all.get(cat, 0)
+            for cat in ["不人気", "普通", "人気"]
+        }
+
+        # 傾向を判定
+        trend_lines = []
+        if diffs["不人気"] > 2:
+            trend_lines.append(f"📈 <b>不人気数字が増加傾向</b>（{diffs['不人気']:+.1f}pt）→ 高額狙いモードが有利")
+        elif diffs["不人気"] < -2:
+            trend_lines.append(f"📉 <b>不人気数字が減少傾向</b>（{diffs['不人気']:+.1f}pt）")
+
+        if diffs["人気"] > 2:
+            trend_lines.append(f"📈 <b>人気数字が増加傾向</b>（{diffs['人気']:+.1f}pt）")
+        elif diffs["人気"] < -2:
+            trend_lines.append(f"📉 <b>人気数字が減少傾向</b>（{diffs['人気']:+.1f}pt）→ 通常モードが有利")
+
+        if diffs["普通"] > 2:
+            trend_lines.append(f"📊 <b>普通数字が増加傾向</b>（{diffs['普通']:+.1f}pt）→ バランス型の時期")
+
+        if not trend_lines:
+            trend_lines.append("📊 <b>最近は全体的に安定傾向</b>")
+
+        trend_html = "<br/>".join(trend_lines)
+
+        return f"""<div class="misc-row" style="background:color-mix(in srgb, var(--accent) 8%, transparent); border-left:3px solid var(--accent); padding:12px; margin-bottom:12px; border-radius:4px; font-size:.9rem;">
+  <b>📈 直近の傾向（直近100回 vs 全期間）</b><br/>
+  {trend_html}
+</div>"""
+    except Exception:
+        return ""
+
+
+def popularity_database_html(conn) -> str:
+    """人気度データベースセクションを生成"""
+    try:
+        # 全期間、直近30/50/100回の統計を取得
+        periods = ["全期間", "直近100回", "直近50回", "直近30回"]
+
+        stats = {}
+        for period in periods:
+            rows = conn.execute(
+                "SELECT category, percentage, count, total FROM popularity_stats WHERE metric_name = ? ORDER BY CASE WHEN category='不人気' THEN 0 WHEN category='普通' THEN 1 ELSE 2 END",
+                (period,)
+            ).fetchall()
+            stats[period] = {cat: (pct, count, total) for cat, pct, count, total in rows}
+
+        # テーブル行を生成
+        table_rows = []
+        for category in ["不人気", "普通", "人気"]:
+            cells = [f'<td style="font-weight:500;">{category}</td>']
+            for period in periods:
+                if category in stats[period]:
+                    pct, count, total = stats[period][category]
+                    cells.append(f'<td>{pct:.1f}% ({count}/{total})</td>')
+                else:
+                    cells.append('<td>-</td>')
+            table_rows.append(f'<tr>{"".join(cells)}</tr>')
+
+        table_html = "\n".join(table_rows)
+
+        return f"""<section class="section">
+  <div class="section-head">
+    <div>
+      <h2>人気度データベース</h2>
+      <p>配当金額に基づいた人気度分類（不人気=高配当、普通=中程度、人気=低配当）の出現割合</p>
+    </div>
+  </div>
+  <div class="section-body">
+    <table style="width:100%; border-collapse:collapse; font-size:.9rem;">
+      <thead>
+        <tr style="border-bottom:2px solid var(--rule);">
+          <th style="text-align:left; padding:10px; font-weight:600;">カテゴリ</th>
+          <th style="text-align:center; padding:10px;">全期間</th>
+          <th style="text-align:center; padding:10px;">直近100回</th>
+          <th style="text-align:center; padding:10px;">直近50回</th>
+          <th style="text-align:center; padding:10px;">直近30回</th>
+        </tr>
+      </thead>
+      <tbody style="border-bottom:1px solid var(--rule);">
+        {table_html}
+      </tbody>
+    </table>
+  </div>
+</section>"""
+    except Exception as e:
+        return ""
+
+
 def main():
     conn = connect()
-    try:
-        total, min_date, max_date = conn.execute(
-            "SELECT COUNT(*), MIN(draw_date), MAX(draw_date) FROM draws"
-        ).fetchone()
-        latest_draw_no = conn.execute("SELECT MAX(draw_no) FROM draws").fetchone()[0]
+    total, min_date, max_date = conn.execute(
+        "SELECT COUNT(*), MIN(draw_date), MAX(draw_date) FROM draws"
+    ).fetchone()
+    latest_draw_no = conn.execute("SELECT MAX(draw_no) FROM draws").fetchone()[0]
 
-        recent = conn.execute(
-            """SELECT draw_no, draw_date, number, prev_draw_no, prev_draw_date, gap
-               FROM v_number_gaps ORDER BY draw_no DESC LIMIT ?""",
-            (RECENT_N,),
-        ).fetchall()
+    recent = conn.execute(
+        """SELECT vng.draw_no, vng.draw_date, vng.number, vng.prev_draw_no, vng.prev_draw_date, vng.gap, d.straight_amount
+           FROM v_number_gaps vng
+           LEFT JOIN draws d ON vng.draw_no = d.draw_no
+           ORDER BY vng.draw_no DESC LIMIT ?""",
+        (RECENT_N,),
+    ).fetchall()
 
-        candidates, excluded, _latest = get_candidates(conn, "straight", min_count=MIN_COUNT)
-        digit_candidates, digit_excluded, _latest_digit = get_candidates(conn, "digit", min_count=MIN_COUNT)
+    candidates, excluded, _latest = get_candidates(conn, "straight", min_count=MIN_COUNT)
+    digit_candidates, digit_excluded, _latest_digit = get_candidates(conn, "digit", min_count=MIN_COUNT)
 
-        appeared = {r[0] for r in conn.execute("SELECT DISTINCT number FROM draws").fetchall()}
-        zero_win_numbers = sorted(f"{i:03d}" for i in range(1000) if f"{i:03d}" not in appeared)
-        one_win_rows = conn.execute(
-            "SELECT number, last_win_draw_no, last_win_date FROM v_number_stats "
-            "WHERE win_count = 1 ORDER BY number"
-        ).fetchall()
+    appeared = {r[0] for r in conn.execute("SELECT DISTINCT number FROM draws").fetchall()}
+    zero_win_numbers = sorted(f"{i:03d}" for i in range(1000) if f"{i:03d}" not in appeared)
+    one_win_rows = conn.execute(
+        "SELECT number, last_win_draw_no, last_win_date FROM v_number_stats "
+        "WHERE win_count = 1 ORDER BY number"
+    ).fetchall()
 
-        all_draws = conn.execute(
-            "SELECT draw_no, draw_date, number FROM draws ORDER BY draw_no DESC"
-        ).fetchall()
+    all_draws = conn.execute(
+        "SELECT draw_no, draw_date, number FROM draws ORDER BY draw_no DESC"
+    ).fetchall()
 
-        pickup_matched, _pickup_digit_set = get_pickup_candidates(conn, min_count=MIN_COUNT, top=10)
-        save_pickup(conn, pickup_matched, latest_draw_no)
+    pickup_matched, _pickup_digit_set = get_pickup_candidates(conn, min_count=MIN_COUNT, top=10)
+    pickup_high_yield, _ = get_pickup_candidates_high_yield(conn, min_count=MIN_COUNT, top=10)
+    high_yield_set = {e["key"] for e in pickup_high_yield}  # 高額狙い候補のセット
+    save_pickup(conn, pickup_matched, latest_draw_no)
 
-        pickup_rows = conn.execute(
-            """SELECT based_on_draw_no, target_draw_no, rank, picked_number, picked_box_key,
-                      win_count, avg_interval, draws_elapsed,
-                      target_draw_date, actual_number, actual_box_key, straight_hit, box_hit
-               FROM v_pickup_results
-               ORDER BY based_on_draw_no DESC, rank ASC"""
-        ).fetchall()
-    finally:
-        conn.close()
+    pickup_rows = conn.execute(
+        """SELECT based_on_draw_no, target_draw_no, rank, picked_number, picked_box_key,
+                  win_count, avg_interval, draws_elapsed,
+                  target_draw_date, actual_number, actual_box_key, straight_hit, box_hit
+           FROM v_pickup_results
+           ORDER BY based_on_draw_no DESC, rank ASC"""
+    ).fetchall()
 
     today_ja = format_date_ja(date.today().isoformat())
 
-    chips = "\n".join(chip_html(*r) for r in recent)
-    gap_summary = gap_summary_html(recent)
+    chips = "\n".join(
+        chip_html(
+            r[0], r[1], r[2], r[3], r[4], r[5],
+            straight_amount=r[6],
+            popularity=get_number_popularity(conn, r[2])
+        )
+        for r in recent
+    )
+    # gap_summary には最初の6要素だけを渡す（straight_amount は不要）
+    recent_for_gap = [r[:6] for r in recent]
+    gap_summary = gap_summary_html(recent_for_gap)
 
     candidate_keys = {e["key"] for e in candidates}
     all_entries = candidates + excluded
@@ -646,8 +797,65 @@ def main():
 
     pickup_groups = group_pickup_rows(pickup_rows)
     today_pickup_group = pickup_groups[0] if pickup_groups else None
-    today_pickup_card = (today_pickup_table_html(today_pickup_group, max_date)
+    today_pickup_card = (today_pickup_table_html(today_pickup_group, max_date, high_yield_set, conn)
                          if today_pickup_group else "<p>ピックアップ対象がありません</p>")
+
+    # 高額狙いモード用
+    if pickup_high_yield:
+        # セット購入のグルーピング
+        from db_common import box_key_of
+        by_box_high = {}
+        for e in pickup_high_yield:
+            bk = box_key_of(e["key"])
+            by_box_high.setdefault(bk, []).append(e["key"])
+
+        # セット購入のまとめ買いヒント
+        cover_groups_high = {bk: ns for bk, ns in by_box_high.items() if len(ns) > 1}
+        if cover_groups_high:
+            lines_high = "".join(
+                f'<li><b class="buy-number">{numbers[0]}</b>をセットで買えば'
+                f'{"・".join(numbers[1:])}もまとめてカバー（組み合わせ: {box_key}）</li>'
+                for box_key, numbers in cover_groups_high.items()
+            )
+            saved_high = sum(len(ns) - 1 for ns in cover_groups_high.values())
+            hint_high = f"""<div class="misc-row" style="margin-bottom:14px">
+  <b>セット購入のまとめ買いヒント</b>：並び順違いで同じ3桁の組み合わせを持つ候補があります。
+  セットはストレート一致・ボックス一致の両方を1枚でカバーするため、どちらか一方だけ買えば十分です。
+  <ul style="margin:6px 0 0; padding-left:1.4em">{lines_high}</ul>
+  実質的な購入数は{len(pickup_high_yield)}個→{len(by_box_high)}個に減らせます（{saved_high}個分の重複を節約）。
+</div>"""
+        else:
+            hint_high = ""
+
+        next_date = next_business_day(date.fromisoformat(max_date))
+        header_high = (f'<div class="misc-row" style="margin-bottom:10px">'
+                       f'<b>第{latest_draw_no + 1}回</b>の予想'
+                       f'（次回開催日: {format_date_ja(next_date.isoformat())}・月〜金開催のため予定、'
+                       f'第{latest_draw_no}回時点のデータで算出）'
+                       f'</div>')
+
+        high_yield_html_rows = "\n".join(
+            f'<tr><td class="hl-id">{rank}</td><td class="hl-num">{e["key"]}</td><td class="hl-count">{e["win_count"]}回<br/><span style="font-size:.8rem; color:var(--ink-mute);">{get_number_popularity(conn, e["key"])}</span></td></tr>'
+            for rank, e in enumerate(pickup_high_yield, start=1)
+        )
+        today_pickup_card_high_yield = (
+            f"<p style='font-size:.85rem; color:var(--ink-dim); margin-bottom:12px;'>"
+            f"人気数字（ぞろ目・連番・8含む等）を除外した候補。配当が高くなる可能性あり。</p>"
+            f"{header_high}{hint_high}"
+            f"<table style='width:100%; border-collapse:collapse;'>"
+            f"<thead><tr style='border-bottom:1px solid var(--rule);'><th style='text-align:left; padding:8px; font-size:.85rem;'>順位</th>"
+            f"<th style='text-align:left; padding:8px; font-size:.85rem;'>数字</th><th style='text-align:left; padding:8px; font-size:.85rem;'>当選</th></tr></thead>"
+            f"<tbody>{high_yield_html_rows}</tbody></table>"
+        )
+    else:
+        today_pickup_card_high_yield = "<p>高額狙いの候補がありません</p>"
+
+    # 傾向サマリーを生成
+    trend_summary = popularity_trend_summary_html(conn)
+
+    # 人気度データベースセクションを生成
+    popularity_db_section = popularity_database_html(conn)
+
     pickup_summary = pickup_summary_html(pickup_groups)
     pickup_history_visible = [pickup_card_html(g) for g in pickup_groups[1:1 + PICKUP_VISIBLE]]
     pickup_history_extra = [pickup_card_html(g) for g in pickup_groups[1 + PICKUP_VISIBLE:1 + PICKUP_EXPANDED]]
@@ -674,17 +882,36 @@ def main():
     <div class="meta-item"><span class="meta-k">更新日</span><span class="meta-v">{today_ja}</span></div>
   </div>
 
+  {popularity_db_section}
+
   <section class="section">
     <div class="section-head">
       <div>
-        <h2>今日のピックアップ数字</h2>
-        <p>「ストレート当選傾向」の候補 × 「1桁の出現間隔」の候補（3桁すべて）を両方満たす番号。最大10個（満たない場合は少なくなる）</p>
+        <h2>ピックアップ数字</h2>
+        <p>「ストレート当選傾向」の候補（平均出現間隔以上経過した数字）</p>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="mode-btn is-active" onclick="switchPickupMode('normal')" style="font-size:.9rem; padding:6px 12px;">通常モード<br/>（的中率重視）</button>
+        <button class="mode-btn" onclick="switchPickupMode('high_yield')" style="font-size:.9rem; padding:6px 12px;">高額狙い<br/>（配当重視）</button>
       </div>
     </div>
-    <div class="section-body">
+    {trend_summary}
+    <div class="section-body" id="pickup-normal">
       {today_pickup_card}
     </div>
+    <div class="section-body" id="pickup-high-yield" style="display:none;">
+      {today_pickup_card_high_yield}
+    </div>
   </section>
+
+  <script>
+    function switchPickupMode(mode) {{
+      document.getElementById('pickup-normal').style.display = mode === 'normal' ? 'block' : 'none';
+      document.getElementById('pickup-high-yield').style.display = mode === 'high_yield' ? 'block' : 'none';
+      document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('is-active'));
+      event.target.closest('.mode-btn').classList.add('is-active');
+    }}
+  </script>
 
   <section class="section">
     <div class="section-head">
@@ -758,27 +985,10 @@ def main():
     </div>
   </section>
 
-  <section class="section">
-    <div class="section-head">
-      <div>
-        <h2>1桁（0〜9）の出現間隔</h2>
-        <p>並び順を問わず3桁のどこかにその数字が含まれていれば出現とみなす／最終出現から経過回数が多い順
-        （候補{len(digit_candidates)}件・除外{len(digit_excluded)}件）
-        参考: <a href="https://blog.umasaku.com/loto/numbers3-num-freq/" target="_blank" rel="noopener">umasaku.com</a></p>
-      </div>
-      <div class="section-head-actions">
-        <button class="btn" onclick="toggleExcluded(['digit-ledger'], this, '除外中を隠す', '除外中を表示')">除外中を隠す</button>
-      </div>
-    </div>
-    <div id="digit-ledger" class="ledger">
-{digit_rows}
-    </div>
-  </section>
-
   {no_data_section}
 
   <footer class="note">
-    <p>各回の抽せんは独立試行です。出現回数・経過回数・平均間隔・候補／除外の判定は過去{total}回の実績に生じた数字の偏り（サンプリング変動）の可視化であり、将来の当せんを予測するものではありません。ボックスは購入対象外のため非掲載（ストレート／セット購入向け）。1桁の出現間隔は位置（1桁目／2桁目／3桁目）を区別せずその数字が含まれていたかのみを見ている。</p>
+    <p>各回の抽せんは独立試行です。出現回数・経過回数・平均間隔・候補／除外の判定は過去{total}回の実績に生じた数字の偏り（サンプリング変動）の可視化であり、将来の当せんを予測するものではありません。ボックスは購入対象外のため非掲載（ストレート／セット購入向け）。</p>
   </footer>
 </div>
 
@@ -800,6 +1010,8 @@ def main():
 </div>
 {SCRIPT}
 """
+
+    conn.close()
 
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUT_PATH.write_text(body, encoding="utf-8")

@@ -248,5 +248,62 @@ def main():
         conn.close()
 
 
+def classify_area(number: str) -> str:
+    """3桁の数字をエリアに分類"""
+    num = int(number)
+    if num == 0:
+        return "0"
+    elif 1 <= num <= 333:
+        return "1-333"
+    elif 334 <= num <= 666:
+        return "334-666"
+    else:
+        return "667-999"
+
+
+def get_recommended_area(conn) -> tuple[str, dict]:
+    """直近100回の出現傾向から推奨エリアを計算
+
+    戻り値: (推奨エリア, {エリア: 出現数})
+    """
+    from collections import Counter
+
+    draws = conn.execute(
+        "SELECT number FROM draws ORDER BY draw_no DESC LIMIT 100"
+    ).fetchall()
+
+    if not draws:
+        return None, {}
+
+    # エリア分類
+    area_counts = Counter(classify_area(num[0]) for num in draws)
+    active_areas = {
+        area: count
+        for area, count in area_counts.items()
+        if area != "0"
+    }
+
+    if not active_areas:
+        return None, area_counts
+
+    recommended = max(active_areas, key=active_areas.get)
+    return recommended, area_counts
+
+
+def filter_candidates_by_area(candidates: list[dict], recommended_area: str) -> list[dict]:
+    """ピックアップ候補をエリアで絞込
+
+    推奨エリアに含まれる候補のみを返す
+    """
+    if not recommended_area or recommended_area == "0":
+        return candidates
+
+    filtered = [
+        c for c in candidates
+        if classify_area(c["key"]) == recommended_area
+    ]
+    return filtered
+
+
 if __name__ == "__main__":
     main()

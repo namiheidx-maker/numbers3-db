@@ -19,7 +19,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from db_common import connect
 from analyze import format_date_ja
-from predict import get_candidates, get_pickup_candidates, get_pickup_candidates_high_yield, save_pickup, get_number_popularity
+from predict import (
+    get_candidates, get_pickup_candidates, get_pickup_candidates_high_yield,
+    save_pickup, get_number_popularity, get_recommended_area, classify_area, filter_candidates_by_area
+)
 
 PICKUP_VISIBLE = 5
 PICKUP_EXPANDED = 30
@@ -652,6 +655,52 @@ def popularity_trend_summary_html(conn) -> str:
         return ""
 
 
+def area_analysis_html(recommended_area: str, area_counts: dict) -> str:
+    """エリア分析セクションを生成"""
+    if not recommended_area:
+        return ""
+
+    total = sum(area_counts.values())
+    area_order = ["1-333", "334-666", "667-999"]
+
+    area_bars = []
+    for area in area_order:
+        count = area_counts.get(area, 0)
+        pct = (count / total * 100) if total > 0 else 0
+        is_recommended = "✓ " if area == recommended_area else ""
+        area_bars.append(
+            f'<div style="margin: 8px 0;">'
+            f'<div style="display: flex; justify-content: space-between; margin-bottom: 4px;">'
+            f'<span>{is_recommended}{area}</span>'
+            f'<span style="font-weight: 600;">{pct:.0f}% ({count}/{total})</span>'
+            f'</div>'
+            f'<div style="width: 100%; height: 24px; background: var(--track); border-radius: 4px; overflow: hidden;">'
+            f'<div style="width: {pct}%; height: 100%; background: var(--accent); transition: width 0.3s;"></div>'
+            f'</div>'
+            f'</div>'
+        )
+
+    return f"""<section class="section">
+  <div class="section-head">
+    <div>
+      <h2>1/3 エリア分析</h2>
+      <p>数字を3エリア(1-333 / 334-666 / 667-999)に分割し、直近100回の出現傾向を分析</p>
+    </div>
+  </div>
+  <div class="section-body">
+    <div style="background: color-mix(in srgb, var(--accent) 10%, transparent); border-left: 3px solid var(--accent); padding: 12px; border-radius: 4px; margin-bottom: 16px;">
+      <div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 4px;">
+        🎯 推奨エリア: <span style="color: var(--accent);">{recommended_area}</span>
+      </div>
+      <div style="font-size: .9rem; color: var(--ink-dim);">
+        直近100回で最も出現頻度が高いエリア。当選確率が1/1000 → 1/333に絞られる
+      </div>
+    </div>
+    {"".join(area_bars)}
+  </div>
+</section>"""
+
+
 def popularity_database_html(conn) -> str:
     """人気度データベースセクションを生成"""
     try:
@@ -740,6 +789,11 @@ def main():
     pickup_matched, _pickup_digit_set = get_pickup_candidates(conn, min_count=MIN_COUNT, top=10)
     pickup_high_yield, _ = get_pickup_candidates_high_yield(conn, min_count=MIN_COUNT, top=10)
     high_yield_set = {e["key"] for e in pickup_high_yield}  # 高額狙い候補のセット
+
+    # エリア分析
+    recommended_area, area_counts = get_recommended_area(conn)
+    area_filtered_pickup = filter_candidates_by_area(pickup_matched, recommended_area)
+
     save_pickup(conn, pickup_matched, latest_draw_no)
 
     pickup_rows = conn.execute(
@@ -853,6 +907,9 @@ def main():
     # 傾向サマリーを生成
     trend_summary = popularity_trend_summary_html(conn)
 
+    # エリア分析セクションを生成
+    area_section = area_analysis_html(recommended_area, area_counts)
+
     # 人気度データベースセクションを生成
     popularity_db_section = popularity_database_html(conn)
 
@@ -881,6 +938,8 @@ def main():
     <div class="meta-item"><span class="meta-k">収録期間</span><span class="meta-v" style="font-size:.85rem">{format_date_ja(min_date)} 〜 {format_date_ja(max_date)}</span></div>
     <div class="meta-item"><span class="meta-k">更新日</span><span class="meta-v">{today_ja}</span></div>
   </div>
+
+  {area_section}
 
   {popularity_db_section}
 

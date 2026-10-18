@@ -851,6 +851,16 @@ def main():
 
     pickup_groups = group_pickup_rows(pickup_rows)
     today_pickup_group = pickup_groups[0] if pickup_groups else None
+
+    # エリアフィルタを適用（推奨エリアの候補のみを表示）
+    if today_pickup_group and recommended_area and recommended_area != "0":
+        area_filtered_picks = [
+            pick for pick in today_pickup_group["picks"]
+            if classify_area(pick[3]) == recommended_area  # pick[3] は picked_number
+        ]
+        if area_filtered_picks:
+            today_pickup_group = {**today_pickup_group, "picks": area_filtered_picks}
+
     today_pickup_card = (today_pickup_table_html(today_pickup_group, max_date, high_yield_set, conn)
                          if today_pickup_group else "<p>ピックアップ対象がありません</p>")
 

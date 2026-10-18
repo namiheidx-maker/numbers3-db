@@ -1,0 +1,22 @@
+name: Numbers3 Update
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+    - cron: '0 9 * * 1-5'
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      - run: pip install requests
+      - run: python3 scripts/scheduled_update.py
+      - run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          [ -n "$(git status -s)" ] && git add -A && git commit -m "Data update: $(date +'%Y-%m-%d %H:%M:%S')" && git push || echo "No changes"
+        continue-on-error: true

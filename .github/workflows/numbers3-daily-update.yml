@@ -26,13 +26,12 @@ jobs:
           pip install requests
 
       - name: Run scheduled update
-        run: |
-          cd /home/runner/work/numbers3-db/numbers3-db
-          python3 scripts/scheduled_update.py
+        working-directory: ${{ github.workspace }}
+        run: python3 scripts/scheduled_update.py
 
       - name: Commit changes if needed
+        working-directory: ${{ github.workspace }}
         run: |
-          cd /home/runner/work/numbers3-db/numbers3-db
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           if [ -n "$(git status -s)" ]; then

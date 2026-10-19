@@ -66,7 +66,7 @@ def init_db():
     try:
         conn.execute("SELECT 1 FROM draws LIMIT 1")
     except sqlite3.OperationalError:
-        conn.execute("""
+        conn.executescript("""
 CREATE TABLE draws (
     draw_no             INTEGER PRIMARY KEY,
     draw_date           TEXT    NOT NULL,
@@ -100,7 +100,6 @@ BEGIN
     UPDATE draws SET updated_at = datetime('now', 'localtime') WHERE draw_no = NEW.draw_no;
 END;
         """)
-        conn.commit()
     finally:
         conn.close()
 

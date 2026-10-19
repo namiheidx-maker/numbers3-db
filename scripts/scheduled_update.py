@@ -20,7 +20,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from db_common import connect, get_max_draw_no
+from db_common import connect, get_max_draw_no, init_db
 import update_data
 
 
@@ -105,6 +105,7 @@ def latest_weekday(d: date, days_offset: int = -1) -> date:
 
 
 def main():
+    init_db()
     conn = connect()
     try:
         should_upd, reason = should_update(conn)

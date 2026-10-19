@@ -60,6 +60,51 @@ def connect() -> sqlite3.Connection:
     return conn
 
 
+def init_db():
+    """テーブルがなければ初期化"""
+    conn = connect()
+    try:
+        conn.execute("SELECT 1 FROM draws LIMIT 1")
+    except sqlite3.OperationalError:
+        conn.execute("""
+CREATE TABLE draws (
+    draw_no             INTEGER PRIMARY KEY,
+    draw_date           TEXT    NOT NULL,
+    number              TEXT    NOT NULL CHECK (length(number) = 3 AND number GLOB '[0-9][0-9][0-9]'),
+    box_key             TEXT    NOT NULL CHECK (length(box_key) = 3),
+    digit1              INTEGER GENERATED ALWAYS AS (CAST(substr(number, 1, 1) AS INTEGER)) STORED,
+    digit2              INTEGER GENERATED ALWAYS AS (CAST(substr(number, 2, 1) AS INTEGER)) STORED,
+    digit3              INTEGER GENERATED ALWAYS AS (CAST(substr(number, 3, 1) AS INTEGER)) STORED,
+    straight_count      INTEGER,
+    straight_amount     INTEGER,
+    box_count           INTEGER,
+    box_amount          INTEGER,
+    set_straight_count  INTEGER,
+    set_straight_amount INTEGER,
+    set_box_count       INTEGER,
+    set_box_amount      INTEGER,
+    mini_number         TEXT,
+    mini_count          INTEGER,
+    mini_amount         INTEGER,
+    source              TEXT    NOT NULL DEFAULT 'unknown',
+    created_at          TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
+    updated_at          TEXT    NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+CREATE INDEX idx_draws_number   ON draws (number);
+CREATE INDEX idx_draws_box_key  ON draws (box_key);
+CREATE INDEX idx_draws_date     ON draws (draw_date);
+CREATE TRIGGER trg_draws_updated_at
+AFTER UPDATE ON draws
+FOR EACH ROW
+BEGIN
+    UPDATE draws SET updated_at = datetime('now', 'localtime') WHERE draw_no = NEW.draw_no;
+END;
+        """)
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def upsert_draws(conn: sqlite3.Connection, rows: list[dict]) -> int:
     """rows の各要素は _FIELDS のキーを持つ dict。number から box_key を自動算出して書き込む。
     戻り値: 書き込んだ件数。

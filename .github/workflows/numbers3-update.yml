@@ -9,6 +9,8 @@ on:
 jobs:
   update:
     runs-on: ubuntu-latest
+    env:
+      TZ: Asia/Tokyo
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v4
@@ -18,9 +20,7 @@ jobs:
         uses: actions/cache@v3
         with:
           path: db/numbers3.db
-          key: numbers3-db-${{ hashFiles('scripts/*.py') }}
-          restore-keys: |
-            numbers3-db-
+          key: numbers3-db-cache
       - name: Create db directory
         run: mkdir -p db
       - run: pip install requests beautifulsoup4

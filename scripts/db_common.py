@@ -61,17 +61,41 @@ def connect() -> sqlite3.Connection:
 
 
 def init_db():
-    """テーブルとビューがなければ初期化"""
+    """テーブルとビューがなければ初期化。既存pickupsデータをバックアップ→リストア"""
+    import json
+
     conn = connect()
     try:
         conn.execute("SELECT 1 FROM draws LIMIT 1")
+        # テーブルが存在：pickupsをバックアップ
+        try:
+            pickups_backup = conn.execute(
+                "SELECT based_on_draw_no, rank, number, box_key, win_count, avg_interval, draws_elapsed FROM pickups"
+            ).fetchall()
+        except sqlite3.OperationalError:
+            pickups_backup = []
     except sqlite3.OperationalError:
+        # テーブルなし：スキーマから初期化
         schema_path = ROOT / "schema.sql"
         with open(schema_path) as f:
             schema_sql = f.read()
         conn.executescript(schema_sql)
+        pickups_backup = []
     finally:
         conn.close()
+
+    # pickupsデータをリストア
+    if pickups_backup:
+        conn = connect()
+        try:
+            for row in pickups_backup:
+                conn.execute(
+                    "INSERT OR REPLACE INTO pickups (based_on_draw_no, rank, number, box_key, win_count, avg_interval, draws_elapsed) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    row
+                )
+            conn.commit()
+        finally:
+            conn.close()
 
 
 def upsert_draws(conn: sqlite3.Connection, rows: list[dict]) -> int:

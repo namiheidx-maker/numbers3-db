@@ -24,6 +24,7 @@ jobs:
         run: mkdir -p db
       - run: pip install requests beautifulsoup4
       - run: python3 scripts/scheduled_update.py
+      - run: python3 -c "from scripts.db_common import init_db; init_db()"
       - run: python3 scripts/build_report.py
       - run: python3 scripts/predict.py > /tmp/predict_output.txt
       - run: |

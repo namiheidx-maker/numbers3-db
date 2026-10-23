@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-db/numbers3.db から当選台帳ダッシュボード（dashboard/index.html）を生成する。
+db/numbers3.db から当選台帳ダッシュボード（docs/index.html）を生成する。
 Artifactとして公開/更新する直前に実行する想定。
 
 構成:
@@ -29,7 +29,7 @@ PICKUP_VISIBLE = 5
 PICKUP_EXPANDED = 30
 
 ROOT = Path(__file__).resolve().parent.parent
-OUT_PATH = ROOT / "dashboard" / "index.html"
+OUT_PATH = ROOT / "docs" / "index.html"
 
 RECENT_N = 30
 TOP_VISIBLE = 10

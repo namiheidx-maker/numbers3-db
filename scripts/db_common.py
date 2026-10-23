@@ -67,13 +67,29 @@ def init_db():
     conn = connect()
     try:
         conn.execute("SELECT 1 FROM draws LIMIT 1")
-        # テーブルが存在：pickupsをバックアップ
+        # テーブルが存在：ビューも確認
         try:
-            pickups_backup = conn.execute(
-                "SELECT based_on_draw_no, rank, number, box_key, win_count, avg_interval, draws_elapsed FROM pickups"
-            ).fetchall()
+            conn.execute("SELECT 1 FROM v_number_gaps LIMIT 1")
+            # ビューも存在：pickupsをバックアップ
+            try:
+                pickups_backup = conn.execute(
+                    "SELECT based_on_draw_no, rank, number, box_key, win_count, avg_interval, draws_elapsed FROM pickups"
+                ).fetchall()
+            except sqlite3.OperationalError:
+                pickups_backup = []
         except sqlite3.OperationalError:
-            pickups_backup = []
+            # ビューなし：スキーマ再実行
+            schema_path = ROOT / "schema.sql"
+            with open(schema_path) as f:
+                schema_sql = f.read()
+            conn.executescript(schema_sql)
+            # pickupsはスキーマ再実行で保護されているはず
+            try:
+                pickups_backup = conn.execute(
+                    "SELECT based_on_draw_no, rank, number, box_key, win_count, avg_interval, draws_elapsed FROM pickups"
+                ).fetchall()
+            except sqlite3.OperationalError:
+                pickups_backup = []
     except sqlite3.OperationalError:
         # テーブルなし：スキーマから初期化
         schema_path = ROOT / "schema.sql"

@@ -261,15 +261,19 @@ def classify_area(number: str) -> str:
         return "667-999"
 
 
-def get_recommended_area(conn) -> tuple[str, dict]:
-    """直近100回の出現傾向から推奨エリアを計算
+def get_recommended_area(conn, window: int = 100) -> tuple[str, dict]:
+    """指定期間の出現傾向から推奨エリアを計算
+
+    Args:
+        conn: database connection
+        window: 直近何回を対象とするか（30/50/100）
 
     戻り値: (推奨エリア, {エリア: 出現数})
     """
     from collections import Counter
 
     draws = conn.execute(
-        "SELECT number FROM draws ORDER BY draw_no DESC LIMIT 100"
+        f"SELECT number FROM draws ORDER BY draw_no DESC LIMIT {window}"
     ).fetchall()
 
     if not draws:
@@ -288,6 +292,36 @@ def get_recommended_area(conn) -> tuple[str, dict]:
 
     recommended = max(active_areas, key=active_areas.get)
     return recommended, area_counts
+
+
+def get_area_stats_by_periods(conn) -> dict:
+    """複数期間（30/50/100）のエリア分析統計を一括取得
+
+    戻り値:
+    {
+        "30": {"recommended": "1-333", "counts": {...}, "percentages": {...}, ...},
+        "50": {...},
+        "100": {...}
+    }
+    """
+    result = {}
+
+    for window in [30, 50, 100]:
+        recommended, counts = get_recommended_area(conn, window)
+        total = sum(counts.values())
+
+        result[str(window)] = {
+            "window": window,
+            "recommended": recommended,
+            "counts": dict(counts),
+            "total": total,
+            "percentages": {
+                area: (count / total * 100) if total > 0 else 0
+                for area, count in counts.items()
+            }
+        }
+
+    return result
 
 
 def filter_candidates_by_area(candidates: list[dict], recommended_area: str) -> list[dict]:

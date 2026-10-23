@@ -32,8 +32,3 @@ jobs:
           git config user.email "actions@github.com"
           [ -n "$(git status -s)" ] && git add -A && git commit -m "Auto-update: DB + Dashboard $(date +'%Y-%m-%d %H:%M:%S')" && git push || echo "No changes"
         continue-on-error: true
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dashboard

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-db/numbers3.db から当選台帳ダッシュボード（dashboard/report.html）を生成する。
+db/numbers3.db から当選台帳ダッシュボード（dashboard/index.html）を生成する。
 Artifactとして公開/更新する直前に実行する想定。
 
 構成:
@@ -21,14 +21,15 @@ from db_common import connect
 from analyze import format_date_ja
 from predict import (
     get_candidates, get_pickup_candidates, get_pickup_candidates_high_yield,
-    save_pickup, get_number_popularity, get_recommended_area, classify_area, filter_candidates_by_area
+    save_pickup, get_number_popularity, get_recommended_area, classify_area, filter_candidates_by_area,
+    get_area_stats_by_periods
 )
 
 PICKUP_VISIBLE = 5
 PICKUP_EXPANDED = 30
 
 ROOT = Path(__file__).resolve().parent.parent
-OUT_PATH = ROOT / "dashboard" / "report.html"
+OUT_PATH = ROOT / "dashboard" / "index.html"
 
 RECENT_N = 30
 TOP_VISIBLE = 10
@@ -127,6 +128,9 @@ body{
 .btn:hover{background:var(--surface-2);}
 .btn:focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
 .mode-btn.is-active{background:var(--accent); color:var(--accent-ink);}
+.area-filter-btn{background:transparent; color:var(--ink); border:1px solid var(--rule); border-radius:4px; font-size:.85rem; padding:4px 10px; cursor:pointer;}
+.area-filter-btn:hover{background:var(--surface-2);}
+.area-filter-btn.is-active{background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-weight:600;}
 .btn-row{display:flex; justify-content:center; padding:14px 20px 18px; border-top:1px solid var(--rule);}
 
 .gap-summary{display:flex; flex-wrap:wrap; gap:0; margin-bottom:14px; border:1px solid var(--rule); border-radius:10px; overflow:hidden;}
@@ -655,28 +659,42 @@ def popularity_trend_summary_html(conn) -> str:
         return ""
 
 
-def area_analysis_html(recommended_area: str, area_counts: dict) -> str:
-    """エリア分析セクションを生成"""
-    if not recommended_area:
+def area_analysis_html(area_stats_by_periods: dict) -> str:
+    """複数期間のエリア分析セクションを生成（30/50/100回の並列表示）"""
+    if not area_stats_by_periods:
         return ""
 
-    total = sum(area_counts.values())
     area_order = ["1-333", "334-666", "667-999"]
 
-    area_bars = []
-    for area in area_order:
-        count = area_counts.get(area, 0)
-        pct = (count / total * 100) if total > 0 else 0
-        is_recommended = "✓ " if area == recommended_area else ""
-        area_bars.append(
-            f'<div style="margin: 8px 0;">'
-            f'<div style="display: flex; justify-content: space-between; margin-bottom: 4px;">'
-            f'<span>{is_recommended}{area}</span>'
-            f'<span style="font-weight: 600;">{pct:.0f}% ({count}/{total})</span>'
-            f'</div>'
-            f'<div style="width: 100%; height: 24px; background: var(--track); border-radius: 4px; overflow: hidden;">'
-            f'<div style="width: {pct}%; height: 100%; background: var(--accent); transition: width 0.3s;"></div>'
-            f'</div>'
+    period_items = []
+    for window in ["30", "50", "100"]:
+        stats = area_stats_by_periods.get(window, {})
+        recommended = stats.get("recommended", "")
+        counts = stats.get("counts", {})
+        total = stats.get("total", 0)
+
+        area_bars = []
+        for area in area_order:
+            count = counts.get(area, 0)
+            pct = (count / total * 100) if total > 0 else 0
+            is_recommended = "✓ " if area == recommended else ""
+            area_bars.append(
+                f'<div style="margin: 6px 0;">'
+                f'<div style="display: flex; justify-content: space-between; margin-bottom: 3px; font-size: 0.9rem;">'
+                f'<span>{is_recommended}{area}</span>'
+                f'<span style="font-weight: 600;">{pct:.1f}% ({count})</span>'
+                f'</div>'
+                f'<div style="width: 100%; height: 16px; background: var(--track); border-radius: 2px; overflow: hidden;">'
+                f'<div style="width: {pct}%; height: 100%; background: var(--accent); transition: width 0.3s;"></div>'
+                f'</div>'
+                f'</div>'
+            )
+
+        period_items.append(
+            f'<div style="flex: 1; min-width: 150px; padding: 12px; background: var(--surface-2); border-radius: 6px;">'
+            f'<div style="font-weight: 600; margin-bottom: 2px; color: var(--accent); font-size: 0.95rem;">直近{window}回</div>'
+            f'<div style="font-size: 0.85rem; color: var(--ink-dim); margin-bottom: 10px;">推奨: <span style="color: var(--ink); font-weight: 600;">{recommended or "不確定"}</span></div>'
+            f'{"".join(area_bars)}'
             f'</div>'
         )
 
@@ -684,19 +702,16 @@ def area_analysis_html(recommended_area: str, area_counts: dict) -> str:
   <div class="section-head">
     <div>
       <h2>1/3 エリア分析</h2>
-      <p>数字を3エリア(1-333 / 334-666 / 667-999)に分割し、直近100回の出現傾向を分析</p>
+      <p>数字を3エリア(1-333 / 334-666 / 667-999)に分割し、複数期間の出現傾向を比較</p>
     </div>
   </div>
   <div class="section-body">
-    <div style="background: color-mix(in srgb, var(--accent) 10%, transparent); border-left: 3px solid var(--accent); padding: 12px; border-radius: 4px; margin-bottom: 16px;">
-      <div style="font-size: 1.1rem; font-weight: 600; margin-bottom: 4px;">
-        🎯 推奨エリア: <span style="color: var(--accent);">{recommended_area}</span>
-      </div>
-      <div style="font-size: .9rem; color: var(--ink-dim);">
-        直近100回で最も出現頻度が高いエリア。当選確率が1/1000 → 1/333に絞られる
-      </div>
+    <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+      {"".join(period_items)}
     </div>
-    {"".join(area_bars)}
+    <div style="margin-top: 16px; padding: 10px; background: color-mix(in srgb, var(--ink-mute) 10%, transparent); border-radius: 4px; font-size: 0.9rem; color: var(--ink-dim);">
+      💡 ピックアップセクションのエリアフィルタを切り替えて、異なる時間窓での推奨エリアで候補を絞込できます
+    </div>
   </div>
 </section>"""
 
@@ -790,9 +805,19 @@ def main():
     pickup_high_yield, _ = get_pickup_candidates_high_yield(conn, min_count=MIN_COUNT, top=10)
     high_yield_set = {e["key"] for e in pickup_high_yield}  # 高額狙い候補のセット
 
-    # エリア分析
-    recommended_area, area_counts = get_recommended_area(conn)
-    area_filtered_pickup = filter_candidates_by_area(pickup_matched, recommended_area)
+    # エリア分析（複数期間）
+    area_stats_by_periods = get_area_stats_by_periods(conn)
+
+    # 各期間のエリアフィルタ適用版ピックアップ候補を事前計算
+    pickup_filtered_by_window = {}
+    pickup_filtered_by_window["none"] = pickup_matched  # フィルタなし
+    for window in [30, 50, 100]:
+        recommended_area_window, _ = get_recommended_area(conn, window)
+        pickup_filtered_by_window[str(window)] = (
+            filter_candidates_by_area(pickup_matched, recommended_area_window)
+            if recommended_area_window and recommended_area_window != "0"
+            else pickup_matched
+        )
 
     save_pickup(conn, pickup_matched, latest_draw_no)
 
@@ -852,17 +877,35 @@ def main():
     pickup_groups = group_pickup_rows(pickup_rows)
     today_pickup_group = pickup_groups[0] if pickup_groups else None
 
-    # エリアフィルタを適用（推奨エリアの候補のみを表示）
-    if today_pickup_group and recommended_area and recommended_area != "0":
-        area_filtered_picks = [
-            pick for pick in today_pickup_group["picks"]
-            if classify_area(pick[3]) == recommended_area  # pick[3] は picked_number
-        ]
-        if area_filtered_picks:
-            today_pickup_group = {**today_pickup_group, "picks": area_filtered_picks}
+    # エリアフィルタ版のテーブルを複数生成
+    pickup_area_versions = {}
+    if today_pickup_group:
+        # フィルタなし版
+        pickup_area_versions["none"] = today_pickup_table_html(today_pickup_group, max_date, high_yield_set, conn)
 
-    today_pickup_card = (today_pickup_table_html(today_pickup_group, max_date, high_yield_set, conn)
-                         if today_pickup_group else "<p>ピックアップ対象がありません</p>")
+        # エリアフィルタ版（30/50/100）
+        for window in [30, 50, 100]:
+            recommended_area_window, _ = get_recommended_area(conn, window)
+            area_filtered = filter_candidates_by_area(pickup_matched, recommended_area_window)
+
+            if area_filtered:
+                # フィルタ後の picks に対応する行を構築
+                filtered_group = {**today_pickup_group}
+                filtered_group["picks"] = [p for p in today_pickup_group["picks"]
+                                          if any(p[3] == c["key"] for c in area_filtered)]
+                if filtered_group["picks"]:
+                    pickup_area_versions[str(window)] = today_pickup_table_html(filtered_group, max_date, high_yield_set, conn)
+                else:
+                    pickup_area_versions[str(window)] = f"<p>直近{window}回の推奨エリアに候補がありません</p>"
+            else:
+                pickup_area_versions[str(window)] = f"<p>直近{window}回の推奨エリアに候補がありません</p>"
+
+    # デフォルト表示（フィルタなし）
+    if today_pickup_group:
+        today_pickup_card = pickup_area_versions.get("none", "<p>ピックアップ対象がありません</p>")
+    else:
+        today_pickup_card = "<p>ピックアップ対象がありません</p>"
+        pickup_area_versions = {}
 
     # 高額狙いモード用
     if pickup_high_yield:
@@ -918,7 +961,7 @@ def main():
     trend_summary = popularity_trend_summary_html(conn)
 
     # エリア分析セクションを生成
-    area_section = area_analysis_html(recommended_area, area_counts)
+    area_section = area_analysis_html(area_stats_by_periods)
 
     # 人気度データベースセクションを生成
     popularity_db_section = popularity_database_html(conn)
@@ -965,9 +1008,25 @@ def main():
       </div>
     </div>
     {trend_summary}
+
+    <!-- 通常モード -->
     <div class="section-body" id="pickup-normal">
-      {today_pickup_card}
+      <!-- エリアフィルタタブ -->
+      <div style="display:flex; gap:6px; margin-bottom:12px; border-bottom:1px solid var(--rule); padding-bottom:8px;">
+        <button class="area-filter-btn is-active" onclick="switchAreaFilter('none')">フィルタなし</button>
+        <button class="area-filter-btn" onclick="switchAreaFilter('30')">直近30回推奨</button>
+        <button class="area-filter-btn" onclick="switchAreaFilter('50')">直近50回推奨</button>
+        <button class="area-filter-btn" onclick="switchAreaFilter('100')">直近100回推奨</button>
+      </div>
+
+      <!-- 各フィルタ版のコンテンツ -->
+      <div id="area-filter-none" style="display:block;">{today_pickup_card}</div>
+      <div id="area-filter-30" style="display:none;">{pickup_area_versions.get("30", "<p>直近30回の推奨エリアに候補がありません</p>")}</div>
+      <div id="area-filter-50" style="display:none;">{pickup_area_versions.get("50", "<p>直近50回の推奨エリアに候補がありません</p>")}</div>
+      <div id="area-filter-100" style="display:none;">{pickup_area_versions.get("100", "<p>直近100回の推奨エリアに候補がありません</p>")}</div>
     </div>
+
+    <!-- 高額狙いモード -->
     <div class="section-body" id="pickup-high-yield" style="display:none;">
       {today_pickup_card_high_yield}
     </div>
@@ -979,6 +1038,13 @@ def main():
       document.getElementById('pickup-high-yield').style.display = mode === 'high_yield' ? 'block' : 'none';
       document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('is-active'));
       event.target.closest('.mode-btn').classList.add('is-active');
+    }}
+
+    function switchAreaFilter(window_type) {{
+      document.querySelectorAll('[id^="area-filter-"]').forEach(el => el.style.display = 'none');
+      document.getElementById('area-filter-' + window_type).style.display = 'block';
+      document.querySelectorAll('.area-filter-btn').forEach(btn => btn.classList.remove('is-active'));
+      event.target.classList.add('is-active');
     }}
   </script>
 

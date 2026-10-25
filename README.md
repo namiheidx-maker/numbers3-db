@@ -27,16 +27,19 @@ numbers3-db/
 │   ├── update_data.py     # 自動更新の窓口（mk-mode CSV優先、失敗時scrape_update.pyへフォールバック）
 │   ├── analyze.py         # 出現回数・経過回数のテキスト一覧（ターミナル確認用）
 │   ├── predict.py         # 平均当選間隔フィルタによる予想候補／除外の抽出・ピックアップ履歴保存
-│   └── build_report.py    # ダッシュボードHTML（dashboard/report.html）を生成
-├── dashboard/
-│   ├── report.html         # build_report.py の生成物（Artifactとして公開するファイル）
-│   └── ARTIFACT_URL.txt    # 公開済みArtifactのURL（再公開時はこのURLを指定して上書き更新）
+│   └── build_report.py    # ダッシュボードHTML（docs/index.html）を生成
+├── docs/
+│   └── index.html          # build_report.py の生成物。GitHub Pagesがそのまま配信
 └── data/                 # 取り込み用CSVの置き場
 ```
 
 `/numbers3`（グローバルスラッシュコマンド、`~/.claude/commands/numbers3.md`）を実行すると
-`update_data.py` → `build_report.py` → Artifact公開（既存URL更新）の順に自動実行される。
+`update_data.py` → `build_report.py` → git commit & push（GitHub Pagesへ反映）の順に自動実行される。
+公開URL: https://namiheidx-maker.github.io/numbers3-db/
 テキストでさっと確認したいだけの場合は `python3 scripts/analyze.py` を直接使う。
+
+（2026-10-24以前はArtifactツールで公開していたが、GitHub Pagesの制約（`/docs`またはルート直下のみ配信可）
+に対応するため `dashboard/report.html` → `docs/index.html` に移行し、以降はgit push運用に切替済み）
 
 ## データソースの選定理由
 

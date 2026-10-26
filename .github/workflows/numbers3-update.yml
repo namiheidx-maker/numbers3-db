@@ -2,7 +2,10 @@ name: Numbers3 Update
 
 on:
   schedule:
-    - cron: '0 21 * * *'
+    # JST 9:00（毎日）: scheduled_update.py の判定で「前営業日データ取得済みか」を確認
+    - cron: '0 0 * * *'
+    # JST 18:00（月〜金）: 当日分の抽せん結果取得を確認
+    - cron: '0 9 * * 1-5'
   workflow_dispatch:
 
 jobs:

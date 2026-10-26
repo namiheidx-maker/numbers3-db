@@ -37,6 +37,8 @@ TOP_EXPANDED = 50
 MIN_COUNT = 2
 
 STYLE = """
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ナンバーズ3 当選台帳</title>
 <style>
 :root{

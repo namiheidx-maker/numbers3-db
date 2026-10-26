@@ -20,6 +20,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from db_common import connect, box_key_of
 from analyze import format_date_ja
+from pickups_sync import import_pickups_from_json, export_pickups_to_json
 
 # win_count が1以下（平均間隔の算出に必要な間隔サンプルが0個）の番号は
 # 判定不能のため、安全側（除外しない＝候補に残す）として扱う
@@ -196,6 +197,7 @@ def save_pickup(conn, matched: list[dict], based_on_draw_no: int) -> None:
     """ピックアップ結果をpickupsテーブルに保存する（同じbased_on_draw_noは上書き）。
     同一データからの再実行は同じ結果になるため、上書きしても履歴は破壊されない。
     """
+    import_pickups_from_json(conn)  # 他環境（ローカル/GitHub Actions）の記録を先に合流
     conn.execute("DELETE FROM pickups WHERE based_on_draw_no = ?", (based_on_draw_no,))
     conn.executemany(
         """INSERT INTO pickups
@@ -208,6 +210,7 @@ def save_pickup(conn, matched: list[dict], based_on_draw_no: int) -> None:
         ],
     )
     conn.commit()
+    export_pickups_to_json(conn)  # git管理のJSONへ反映し、次回以降どちらの環境でも参照可能にする
 
 
 def show_pickup(conn, top: int, min_count: int):

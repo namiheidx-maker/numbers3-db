@@ -2,11 +2,92 @@
   {
     "based_on_draw_no": 7095,
     "rank": 1,
-    "number": "111",
-    "box_key": "111",
-    "win_count": 10,
-    "avg_interval": 50.5,
-    "draws_elapsed": 5
+    "number": "963",
+    "box_key": "369",
+    "win_count": 12,
+    "avg_interval": 575.9090909090909,
+    "draws_elapsed": 690
+  },
+  {
+    "based_on_draw_no": 7095,
+    "rank": 2,
+    "number": "339",
+    "box_key": "339",
+    "win_count": 9,
+    "avg_interval": 678.375,
+    "draws_elapsed": 843
+  },
+  {
+    "based_on_draw_no": 7095,
+    "rank": 3,
+    "number": "966",
+    "box_key": "669",
+    "win_count": 8,
+    "avg_interval": 462.85714285714283,
+    "draws_elapsed": 2795
+  },
+  {
+    "based_on_draw_no": 7095,
+    "rank": 4,
+    "number": "336",
+    "box_key": "336",
+    "win_count": 8,
+    "avg_interval": 266.2857142857143,
+    "draws_elapsed": 2547
+  },
+  {
+    "based_on_draw_no": 7095,
+    "rank": 5,
+    "number": "699",
+    "box_key": "699",
+    "win_count": 8,
+    "avg_interval": 696.5714285714286,
+    "draws_elapsed": 1616
+  },
+  {
+    "based_on_draw_no": 7095,
+    "rank": 6,
+    "number": "393",
+    "box_key": "339",
+    "win_count": 7,
+    "avg_interval": 715.5,
+    "draws_elapsed": 1809
+  },
+  {
+    "based_on_draw_no": 7095,
+    "rank": 7,
+    "number": "363",
+    "box_key": "336",
+    "win_count": 7,
+    "avg_interval": 829.3333333333334,
+    "draws_elapsed": 1266
+  },
+  {
+    "based_on_draw_no": 7095,
+    "rank": 8,
+    "number": "333",
+    "box_key": "333",
+    "win_count": 6,
+    "avg_interval": 729.6,
+    "draws_elapsed": 3412
+  },
+  {
+    "based_on_draw_no": 7095,
+    "rank": 9,
+    "number": "396",
+    "box_key": "369",
+    "win_count": 6,
+    "avg_interval": 829.8,
+    "draws_elapsed": 2559
+  },
+  {
+    "based_on_draw_no": 7095,
+    "rank": 10,
+    "number": "999",
+    "box_key": "999",
+    "win_count": 5,
+    "avg_interval": 786.0,
+    "draws_elapsed": 2807
   },
   {
     "based_on_draw_no": 7096,

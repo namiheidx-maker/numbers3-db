@@ -327,6 +327,57 @@ def get_area_stats_by_periods(conn) -> dict:
     return result
 
 
+def get_area_streak_stats(conn) -> dict:
+    """エリア（1-333 / 334-666 / 667-999）ごとの継続回数（連続して同じエリアが出た回数）統計。
+
+    全履歴に対してランレングス（同じエリアが何回連続したか）を求め、エリアごとに
+    継続回数の最長・最短・平均・サンプル数を算出する。「000」(エリア"0")は連続を断ち切る
+    区切りとして扱う（既存のget_recommended_areaがactive_areasから"0"を除外しているのと同じ考え方）。
+
+    戻り値:
+    {
+        "by_area": {"1-333": {"streak_count": N, "max_streak": M, "min_streak": m, "avg_streak": a}, ...},
+        "current": {"area": "1-333", "length": k, "since_draw_no": s},
+    }
+    各エリアとの比較は過去の出現パターン（サンプリング変動）の可視化であり、
+    次回の当せん確率を変えるものではない（当せんは各回独立試行）。
+    """
+    draws = conn.execute("SELECT draw_no, number FROM draws ORDER BY draw_no ASC").fetchall()
+
+    runs = []  # [(area, length, start_draw_no)]
+    current_area = None
+    current_start = None
+    current_len = 0
+    for draw_no, number in draws:
+        area = classify_area(number)
+        if area == current_area:
+            current_len += 1
+        else:
+            if current_area is not None:
+                runs.append((current_area, current_len, current_start))
+            current_area = area
+            current_start = draw_no
+            current_len = 1
+    if current_area is not None:
+        runs.append((current_area, current_len, current_start))
+
+    area_order = ["1-333", "334-666", "667-999"]
+    by_area = {}
+    for area in area_order:
+        lengths = [length for a, length, _ in runs if a == area]
+        by_area[area] = {
+            "streak_count": len(lengths),
+            "max_streak": max(lengths) if lengths else 0,
+            "min_streak": min(lengths) if lengths else 0,
+            "avg_streak": (sum(lengths) / len(lengths)) if lengths else 0,
+        }
+
+    last_area, last_len, last_start = runs[-1] if runs else (None, 0, None)
+    current = {"area": last_area, "length": last_len, "since_draw_no": last_start}
+
+    return {"by_area": by_area, "current": current}
+
+
 def filter_candidates_by_area(candidates: list[dict], recommended_area: str) -> list[dict]:
     """ピックアップ候補をエリアで絞込
 

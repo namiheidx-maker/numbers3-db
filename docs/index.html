@@ -236,7 +236,7 @@ table.history td.no{font-family:"IBM Plex Mono",monospace; color:var(--ink-mute)
   <div class="meta-row">
     <div class="meta-item"><span class="meta-k">総抽せん回数</span><span class="meta-v">7100回</span></div>
     <div class="meta-item"><span class="meta-k">収録期間</span><span class="meta-v" style="font-size:.85rem">1994年10月7日 〜 2026年10月26日</span></div>
-    <div class="meta-item"><span class="meta-k">更新日</span><span class="meta-v">2026年10月27日</span></div>
+    <div class="meta-item"><span class="meta-k">更新日</span><span class="meta-v">2026年10月28日</span></div>
   </div>
 
   <section class="section">
@@ -252,6 +252,34 @@ table.history td.no{font-family:"IBM Plex Mono",monospace; color:var(--ink-mute)
     </div>
     <div style="margin-top: 16px; padding: 10px; background: color-mix(in srgb, var(--ink-mute) 10%, transparent); border-radius: 4px; font-size: 0.9rem; color: var(--ink-dim);">
       💡 ピックアップセクションのエリアフィルタを切り替えて、異なる時間窓での推奨エリアで候補を絞込できます
+    </div>
+  </div>
+</section>
+
+  <section class="section">
+  <div class="section-head">
+    <div>
+      <h2>エリア継続回数</h2>
+      <p>同じエリアが何回連続して出たか（全履歴対象）。各回は独立試行のため、継続回数が平均・最長に近いことは
+      次回の当せん確率を変えるものではなく、過去の出現パターンの参考情報です</p>
+    </div>
+  </div>
+  <div class="section-body">
+    <div style="overflow-x:auto;">
+    <table style="width:100%; border-collapse:collapse; font-size:.9rem;">
+      <thead>
+        <tr style="border-bottom:1px solid var(--rule); text-align:left; color:var(--ink-dim); font-size:.8rem;">
+          <th style="padding:6px 8px;">エリア</th>
+          <th style="padding:6px 8px;">現在の継続</th>
+          <th style="padding:6px 8px;">平均継続回数</th>
+          <th style="padding:6px 8px;">最長継続回数</th>
+          <th style="padding:6px 8px;">最短継続回数</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="border-bottom:1px solid var(--rule); "><td style="padding:8px; font-weight:600;">1-333</td><td style="padding:8px;"><span style="color:var(--ink-mute);">—</span></td><td style="padding:8px;">1.53回</td><td style="padding:8px;">7回</td><td style="padding:8px;">1回</td></tr><tr style="border-bottom:1px solid var(--rule); "><td style="padding:8px; font-weight:600;">334-666</td><td style="padding:8px;"><span style="color:var(--ink-mute);">—</span></td><td style="padding:8px;">1.48回</td><td style="padding:8px;">6回</td><td style="padding:8px;">1回</td></tr><tr style="border-bottom:1px solid var(--rule); background:var(--surface-2);"><td style="padding:8px; font-weight:600;">667-999</td><td style="padding:8px;"><b>1回継続中</b><br><span style="font-size:.75rem; color:var(--ink-mute);">第7100回から</span></td><td style="padding:8px;">1.54回</td><td style="padding:8px;">6回</td><td style="padding:8px;">1回</td></tr>
+      </tbody>
+    </table>
     </div>
   </div>
 </section>

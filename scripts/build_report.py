@@ -22,7 +22,7 @@ from analyze import format_date_ja
 from predict import (
     get_candidates, get_pickup_candidates, get_pickup_candidates_high_yield,
     save_pickup, get_number_popularity, get_recommended_area, classify_area, filter_candidates_by_area,
-    get_area_stats_by_periods
+    get_area_stats_by_periods, get_area_streak_stats
 )
 
 PICKUP_VISIBLE = 5
@@ -661,6 +661,71 @@ def popularity_trend_summary_html(conn) -> str:
         return ""
 
 
+def area_streak_html(streak_stats: dict) -> str:
+    """エリアごとの継続回数（ランレングス）統計セクションを生成。"""
+    if not streak_stats:
+        return ""
+
+    area_order = ["1-333", "334-666", "667-999"]
+    by_area = streak_stats.get("by_area", {})
+    current = streak_stats.get("current", {})
+    current_area = current.get("area")
+    current_len = current.get("length", 0)
+    current_since = current.get("since_draw_no")
+
+    rows = []
+    for area in area_order:
+        s = by_area.get(area, {})
+        max_streak = s.get("max_streak", 0)
+        min_streak = s.get("min_streak", 0)
+        avg_streak = s.get("avg_streak", 0)
+        is_current = area == current_area
+        if is_current:
+            over_avg = "（平均超え）" if current_len >= avg_streak else ""
+            at_max = " ／ 過去最長に到達" if current_len >= max_streak and max_streak > 0 else ""
+            current_cell = f'<b>{current_len}回継続中</b>{over_avg}{at_max}<br><span style="font-size:.75rem; color:var(--ink-mute);">第{current_since}回から</span>'
+        else:
+            current_cell = '<span style="color:var(--ink-mute);">—</span>'
+        bg = "background:var(--surface-2);" if is_current else ""
+        rows.append(
+            f'<tr style="border-bottom:1px solid var(--rule); {bg}">'
+            f'<td style="padding:8px; font-weight:600;">{area}</td>'
+            f'<td style="padding:8px;">{current_cell}</td>'
+            f'<td style="padding:8px;">{avg_streak:.2f}回</td>'
+            f'<td style="padding:8px;">{max_streak}回</td>'
+            f'<td style="padding:8px;">{min_streak}回</td>'
+            f'</tr>'
+        )
+
+    return f"""<section class="section">
+  <div class="section-head">
+    <div>
+      <h2>エリア継続回数</h2>
+      <p>同じエリアが何回連続して出たか（全履歴対象）。各回は独立試行のため、継続回数が平均・最長に近いことは
+      次回の当せん確率を変えるものではなく、過去の出現パターンの参考情報です</p>
+    </div>
+  </div>
+  <div class="section-body">
+    <div style="overflow-x:auto;">
+    <table style="width:100%; border-collapse:collapse; font-size:.9rem;">
+      <thead>
+        <tr style="border-bottom:1px solid var(--rule); text-align:left; color:var(--ink-dim); font-size:.8rem;">
+          <th style="padding:6px 8px;">エリア</th>
+          <th style="padding:6px 8px;">現在の継続</th>
+          <th style="padding:6px 8px;">平均継続回数</th>
+          <th style="padding:6px 8px;">最長継続回数</th>
+          <th style="padding:6px 8px;">最短継続回数</th>
+        </tr>
+      </thead>
+      <tbody>
+        {"".join(rows)}
+      </tbody>
+    </table>
+    </div>
+  </div>
+</section>"""
+
+
 def area_analysis_html(area_stats_by_periods: dict) -> str:
     """複数期間のエリア分析セクションを生成（30/50/100回の並列表示）"""
     if not area_stats_by_periods:
@@ -964,6 +1029,8 @@ def main():
 
     # エリア分析セクションを生成
     area_section = area_analysis_html(area_stats_by_periods)
+    area_streak_stats = get_area_streak_stats(conn)
+    area_streak_section = area_streak_html(area_streak_stats)
 
     # 人気度データベースセクションを生成
     popularity_db_section = popularity_database_html(conn)
@@ -995,6 +1062,8 @@ def main():
   </div>
 
   {area_section}
+
+  {area_streak_section}
 
   {popularity_db_section}
 

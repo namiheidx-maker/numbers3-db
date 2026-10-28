@@ -331,12 +331,14 @@ def get_area_streak_stats(conn) -> dict:
     """エリア（1-333 / 334-666 / 667-999）ごとの継続回数（連続して同じエリアが出た回数）統計。
 
     全履歴に対してランレングス（同じエリアが何回連続したか）を求め、エリアごとに
-    継続回数の最長・最短・平均・サンプル数を算出する。「000」(エリア"0")は連続を断ち切る
-    区切りとして扱う（既存のget_recommended_areaがactive_areasから"0"を除外しているのと同じ考え方）。
+    継続回数の最長・平均・サンプル数、直近5回分の継続履歴（新しい順）を算出する。
+    「000」(エリア"0")は連続を断ち切る区切りとして扱う（既存のget_recommended_areaが
+    active_areasから"0"を除外しているのと同じ考え方）。
 
     戻り値:
     {
-        "by_area": {"1-333": {"streak_count": N, "max_streak": M, "min_streak": m, "avg_streak": a}, ...},
+        "by_area": {"1-333": {"streak_count": N, "max_streak": M, "avg_streak": a,
+                               "recent": [新しい順の継続回数, ...最大5件]}, ...},
         "current": {"area": "1-333", "length": k, "since_draw_no": s},
     }
     各エリアとの比較は過去の出現パターン（サンプリング変動）の可視化であり、
@@ -368,8 +370,8 @@ def get_area_streak_stats(conn) -> dict:
         by_area[area] = {
             "streak_count": len(lengths),
             "max_streak": max(lengths) if lengths else 0,
-            "min_streak": min(lengths) if lengths else 0,
             "avg_streak": (sum(lengths) / len(lengths)) if lengths else 0,
+            "recent": list(reversed(lengths[-5:])),
         }
 
     last_area, last_len, last_start = runs[-1] if runs else (None, 0, None)

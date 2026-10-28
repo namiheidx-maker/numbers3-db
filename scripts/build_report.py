@@ -768,23 +768,32 @@ def area_streak_html(streak_stats: dict) -> str:
     for area in area_order:
         s = by_area.get(area, {})
         max_streak = s.get("max_streak", 0)
-        min_streak = s.get("min_streak", 0)
         avg_streak = s.get("avg_streak", 0)
+        recent = s.get("recent", [])
         is_current = area == current_area
+
         if is_current:
             over_avg = "（平均超え）" if current_len >= avg_streak else ""
             at_max = " ／ 過去最長に到達" if current_len >= max_streak and max_streak > 0 else ""
-            current_cell = f'<b>{current_len}回継続中</b>{over_avg}{at_max}<br><span style="font-size:.75rem; color:var(--ink-mute);">第{current_since}回から</span>'
+            recent_line = "・".join(f"{n}回" for n in recent[1:]) or "履歴なし"
+            recent_cell = (
+                f'<b>{current_len}回継続中</b>{over_avg}{at_max}'
+                f'<br><span style="font-size:.75rem; color:var(--ink-mute);">第{current_since}回から</span>'
+                f'<br><span style="font-size:.75rem; color:var(--ink-mute);">直前: {recent_line}</span>'
+            )
         else:
-            current_cell = '<span style="color:var(--ink-mute);">—</span>'
+            recent_line = "・".join(f"{n}回" for n in recent) or "履歴なし"
+            recent_cell = (
+                '<span style="color:var(--ink-mute);">現在は非該当</span>'
+                f'<br><span style="font-size:.75rem; color:var(--ink-mute);">直近: {recent_line}</span>'
+            )
         bg = "background:var(--surface-2);" if is_current else ""
         rows.append(
             f'<tr style="border-bottom:1px solid var(--rule); {bg}">'
             f'<td style="padding:8px; font-weight:600;">{area}</td>'
-            f'<td style="padding:8px;">{current_cell}</td>'
+            f'<td style="padding:8px;">{recent_cell}</td>'
             f'<td style="padding:8px;">{avg_streak:.2f}回</td>'
             f'<td style="padding:8px;">{max_streak}回</td>'
-            f'<td style="padding:8px;">{min_streak}回</td>'
             f'</tr>'
         )
 
@@ -802,10 +811,9 @@ def area_streak_html(streak_stats: dict) -> str:
       <thead>
         <tr style="border-bottom:1px solid var(--rule); text-align:left; color:var(--ink-dim); font-size:.8rem;">
           <th style="padding:6px 8px;">エリア</th>
-          <th style="padding:6px 8px;">現在の継続</th>
+          <th style="padding:6px 8px;">直近の継続</th>
           <th style="padding:6px 8px;">平均継続回数</th>
           <th style="padding:6px 8px;">最長継続回数</th>
-          <th style="padding:6px 8px;">最短継続回数</th>
         </tr>
       </thead>
       <tbody>

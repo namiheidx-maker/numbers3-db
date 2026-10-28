@@ -47,7 +47,7 @@ STYLE = """
   --ink:#1B2338; --ink-dim:#5B6478; --ink-mute:#8891A3;
   --accent:#9A6A17; --accent-ink:#FFFFFF;
   --rule:#DDE1EA; --track:#E6E8EF; --overlay:rgba(20,24,38,.45);
-  --area-1:#E4AD4E; --area-2:#BA801C; --area-3:#62430F; --area-0:#8891A3;
+  --area-1:#2a78d6; --area-2:#eb6834; --area-3:#1baf7a; --area-0:#8891A3;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
@@ -56,7 +56,7 @@ STYLE = """
     --ink:#EDEFF5; --ink-dim:#9AA3B8; --ink-mute:#6E7792;
     --accent:#E8B34A; --accent-ink:#121826;
     --rule:#2E3850; --track:#2A3350; --overlay:rgba(6,9,18,.6);
-    --area-1:#F2D59B; --area-2:#E8B34A; --area-3:#BE8718; --area-0:#6E7792;
+    --area-1:#3987e5; --area-2:#d95926; --area-3:#199e70; --area-0:#6E7792;
   }
 }
 :root[data-theme="dark"]{
@@ -65,7 +65,7 @@ STYLE = """
   --ink:#EDEFF5; --ink-dim:#9AA3B8; --ink-mute:#6E7792;
   --accent:#E8B34A; --accent-ink:#121826;
   --rule:#2E3850; --track:#2A3350; --overlay:rgba(6,9,18,.6);
-  --area-1:#F2D59B; --area-2:#E8B34A; --area-3:#BE8718; --area-0:#6E7792;
+  --area-1:#3987e5; --area-2:#d95926; --area-3:#199e70; --area-0:#6E7792;
 }
 *{box-sizing:border-box;}
 body{
@@ -260,6 +260,10 @@ table.history td.no{font-family:"IBM Plex Mono",monospace; color:var(--ink-mute)
 .heatmap-legend-item{display:flex; align-items:center; gap:6px;}
 .heatmap-swatch{width:14px; height:14px; border-radius:3px; flex:none;}
 .heatmap-strip{display:flex; flex-wrap:wrap; gap:2px;}
+.heatmap-range{
+  display:flex; justify-content:space-between; margin-top:8px;
+  font-size:.72rem; color:var(--ink-mute); line-height:1.5;
+}
 .heatmap-cell{
   width:18px; height:18px; border-radius:3px; flex:none; cursor:default;
   position:relative; outline-offset:2px;
@@ -694,8 +698,9 @@ AREA_LABEL = {"1-333": "1-333（低）", "334-666": "334-666（中）", "667-999
 def area_heatmap_html(conn, window: int = 50) -> str:
     """直近window回の当選数字をエリア別に色分けしたヒートマップ（帯状）で表示する。
 
-    1-333→334-666→667-999は数値の低/中/高という順序を持つため、3段階を単一色相の
-    濃淡（ordinalランプ）で表現し、濃淡の並びそのものが「どの帯か」を表す。
+    エリアは色相そのものが違う3色（カテゴリカル配色・dataviz skillの検証済みデフォルトの
+    先頭3スロット）で塗り分ける。同系色の濃淡だと小さいセルでは見分けにくいため、識別を
+    優先して離れた色相を採用している（スロット順はCVD検証済みで固定・循環させない）。
     """
     rows = conn.execute(
         "SELECT draw_no, draw_date, number FROM draws ORDER BY draw_no DESC LIMIT ?",
@@ -725,17 +730,24 @@ def area_heatmap_html(conn, window: int = 50) -> str:
         for area in AREA_ORDER
     )
 
+    first_draw_no, first_draw_date, _ = rows[0]
+    last_draw_no, last_draw_date, _ = rows[-1]
+
     return f"""<section class="section">
   <div class="section-head">
     <div>
       <h2>エリア出現ヒートマップ</h2>
-      <p>直近{window}回の当選数字を3エリア(1-333/334-666/667-999)の濃淡で並べたもの。左が古い回・右が新しい回。
-      同じ濃さが連続している区間ほど、そのエリアの継続が続いている（セルにマウスを乗せるか選択すると詳細を表示）</p>
+      <p>直近{window}回の当選数字を3エリア(1-333/334-666/667-999)の色で並べたもの。左が古い回・右が新しい回。
+      同じ色が連続している区間ほど、そのエリアの継続が続いている（セルにマウスを乗せるか選択すると詳細を表示）</p>
     </div>
   </div>
   <div class="section-body">
     <div class="heatmap-legend">{legend_items}</div>
     <div class="heatmap-strip">{"".join(cells)}</div>
+    <div class="heatmap-range">
+      <span>第{first_draw_no}回<br>{format_date_ja(first_draw_date)}</span>
+      <span style="text-align:right;">第{last_draw_no}回<br>{format_date_ja(last_draw_date)}</span>
+    </div>
   </div>
 </section>"""
 

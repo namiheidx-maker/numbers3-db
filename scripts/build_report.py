@@ -234,6 +234,10 @@ body{
 .dialog-head{display:flex; align-items:center; justify-content:space-between; padding:14px 20px; border-bottom:1px solid var(--rule);}
 .dialog-head h2{margin:0; font-size:1rem; font-weight:700;}
 .dialog-body{overflow-y:auto; padding:0;}
+.offset-box{margin:0 0 16px;}
+.offset-box h3{font-size:.9rem; margin:0 0 6px;}
+.offset-box .note{font-size:.78rem; color:var(--ink-dim); margin:6px 0;}
+.offset-box table.history td, .offset-box table.history th{padding:7px 12px;}
 table.history{width:100%; border-collapse:collapse;}
 table.history th, table.history td{
   padding:9px 20px; text-align:left; font-size:.85rem; border-bottom:1px solid var(--rule);
@@ -589,6 +593,60 @@ def pickup_card_html(group: dict) -> str:
   <div class="pickup-numbers">
 {''.join(chips)}
   </div>
+</div>"""
+
+
+def pickup_offset_html(conn) -> str:
+    """ピックアップを「翌回のみ」でなく「N回後まで」に広げた場合の的中実績。
+    開催回がずれていれば当たっていたか、を偶然の期待値と並べて確認する。
+    期待値: ストレート=1/1000、ボックス=シングル目6/1000・ダブル目3/1000（1抽せんあたり）。
+    """
+    draws = {r[0]: (r[1], r[2]) for r in conn.execute("SELECT draw_no, number, box_key FROM draws")}
+    if not draws:
+        return ""
+    mx = max(draws)
+    picks = conn.execute("SELECT based_on_draw_no, rank, number, box_key FROM pickups").fetchall()
+    windows = [(1, "翌回のみ"), (3, "3回後まで"), (5, "5回後まで"), (10, "10回後まで"), (30, "30回後まで"), (None, "最新回まで")]
+    rows = []
+    hit_events = []
+    for w, label in windows:
+        trials = s_hit = b_hit = 0
+        exp_s = exp_b = 0.0
+        for b, rank, num, bkey in picks:
+            last = mx if w is None else min(mx, b + w)
+            n = last - b
+            if n <= 0:
+                continue
+            trials += n
+            exp_s += n / 1000
+            exp_b += n * (6 if len(set(num)) == 3 else 3 if len(set(num)) == 2 else 1) / 1000
+            for t in range(b + 1, last + 1):
+                d = draws.get(t)
+                if not d:
+                    continue
+                if d[0] == num:
+                    s_hit += 1
+                if d[1] == bkey:
+                    b_hit += 1
+                    if w is None:
+                        hit_events.append((b, num, t, d[0], d[0] == num))
+        rows.append(f'<tr><td>{label}</td><td class="num">{trials}</td>'
+                    f'<td class="num">{s_hit}（期待{exp_s:.2f}）</td>'
+                    f'<td class="num">{b_hit}（期待{exp_b:.2f}）</td></tr>')
+    if hit_events:
+        ev = "、".join(f'第{b}回時点の{num}→第{t}回で{"ストレート" if st else "ボックス"}一致（{act}）'
+                      for b, num, t, act, st in hit_events)
+        ev_html = f'<p class="note">一致の内訳：{ev}</p>'
+    else:
+        ev_html = '<p class="note">最新回までの範囲でも、一致した例はありません。</p>'
+    return f"""<div class="offset-box">
+  <h3>開催回がずれていたら？（N回後までの的中実績）</h3>
+  <p class="note">各ピックアップを「翌回」だけでなく「N回後」まで広げて照合。「延べ試行」は番号×抽せん回の数。括弧内はランダムなら見込まれる的中数（偶然の期待値）。期待値と同程度なら、ずらしても優位性はありません。</p>
+  <table class="history">
+    <tr><th>照合範囲</th><th>延べ試行</th><th>ストレート一致</th><th>ボックス一致（ストレート含む）</th></tr>
+    {''.join(rows)}
+  </table>
+  {ev_html}
 </div>"""
 
 
@@ -1135,7 +1193,7 @@ def main():
     # 人気度データベースセクションを生成
     popularity_db_section = popularity_database_html(conn)
 
-    pickup_summary = pickup_summary_html(pickup_groups)
+    pickup_summary = pickup_summary_html(pickup_groups) + pickup_offset_html(conn)
     pickup_history_visible = [pickup_card_html(g) for g in pickup_groups[1:1 + PICKUP_VISIBLE]]
     pickup_history_extra = [pickup_card_html(g) for g in pickup_groups[1 + PICKUP_VISIBLE:1 + PICKUP_EXPANDED]]
 

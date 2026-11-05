@@ -196,6 +196,10 @@ body{
 .dialog-head{display:flex; align-items:center; justify-content:space-between; padding:14px 20px; border-bottom:1px solid var(--rule);}
 .dialog-head h2{margin:0; font-size:1rem; font-weight:700;}
 .dialog-body{overflow-y:auto; padding:0;}
+.offset-box{margin:0 0 16px;}
+.offset-box h3{font-size:.9rem; margin:0 0 6px;}
+.offset-box .note{font-size:.78rem; color:var(--ink-dim); margin:6px 0;}
+.offset-box table.history td, .offset-box table.history th{padding:7px 12px;}
 table.history{width:100%; border-collapse:collapse;}
 table.history th, table.history td{
   padding:9px 20px; text-align:left; font-size:.85rem; border-bottom:1px solid var(--rule);
@@ -455,6 +459,14 @@ table.history td.no{font-family:"IBM Plex Mono",monospace; color:var(--ink-mute)
   <div class="gap-stat"><span class="gap-k">評価済み回数</span><span class="gap-v">12回</span></div>
   <div class="gap-stat"><span class="gap-k">ストレート的中</span><span class="gap-v">0回</span><span class="gap-note">的中率0.0%</span></div>
   <div class="gap-stat"><span class="gap-k">ボックス一致</span><span class="gap-v">0回</span><span class="gap-note">一致率0.0%</span></div>
+</div><div class="offset-box">
+  <h3>開催回がずれていたら？（N回後までの的中実績）</h3>
+  <p class="note">各ピックアップを「翌回」だけでなく「N回後」まで広げて照合。「延べ試行」は番号×抽せん回の数。括弧内はランダムなら見込まれる的中数（偶然の期待値）。期待値と同程度なら、ずらしても優位性はありません。</p>
+  <table class="history">
+    <tr><th>照合範囲</th><th>延べ試行</th><th>ストレート一致</th><th>ボックス一致（ストレート含む）</th></tr>
+    <tr><td>翌回のみ</td><td class="num">97</td><td class="num">0（期待0.10）</td><td class="num">0（期待0.31）</td></tr><tr><td>3回後まで</td><td class="num">261</td><td class="num">0（期待0.26）</td><td class="num">0（期待0.81）</td></tr><tr><td>5回後まで</td><td class="num">385</td><td class="num">0（期待0.39）</td><td class="num">0（期待1.19）</td></tr><tr><td>10回後まで</td><td class="num">530</td><td class="num">0（期待0.53）</td><td class="num">0（期待1.61）</td></tr><tr><td>30回後まで</td><td class="num">562</td><td class="num">0（期待0.56）</td><td class="num">0（期待1.71）</td></tr><tr><td>最新回まで</td><td class="num">562</td><td class="num">0（期待0.56）</td><td class="num">0（期待1.71）</td></tr>
+  </table>
+  <p class="note">最新回までの範囲でも、一致した例はありません。</p>
 </div>
       <div id="pickup-ledger">
 <div class="pickup-card">

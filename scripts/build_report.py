@@ -1053,6 +1053,76 @@ def walk_forward_html(conn) -> str:
 </section>"""
 
 
+def popularity_ev_html(conn) -> str:
+    """買う人の偏り（人気度）と期待値の検定セクション。"""
+    from popularity_ev import run
+    res = run(conn)
+    badge = {0: ("範囲内", "var(--ink-dim)"), 1: ("補正前のみ", "var(--accent)"), 2: ("有意", "var(--area-2)")}
+    mx = max(abs(f["mean"] - 1) for f in res["features"]) or 1
+    trs = []
+    for f in sorted(res["features"], key=lambda x: -abs(x["mean"] - 1)):
+        label, color = badge[f["level"]]
+        w = abs(f["mean"] - 1) / mx * 100
+        bar_color = "var(--area-3)" if f["mean"] >= 1 else "var(--area-2)"
+        trs.append(
+            f'<tr style="border-top:1px solid var(--rule);">'
+            f'<td style="padding:5px 8px;" title="{f["note"]}">{f["name"]}</td>'
+            f'<td style="padding:5px 8px; text-align:right; color:var(--ink-dim); font-variant-numeric:tabular-nums;">{f["share"]:.1f}%</td>'
+            f'<td style="padding:5px 8px; width:30%;"><div style="height:8px; width:{w:.1f}%; background:{bar_color}; border-radius:2px;"></div></td>'
+            f'<td style="padding:5px 8px; text-align:right; font-variant-numeric:tabular-nums;">{f["mean"]:.3f}</td>'
+            f'<td style="padding:5px 8px; text-align:right; font-variant-numeric:tabular-nums;">{f["ret"]:.1f}%</td>'
+            f'<td style="padding:5px 8px; font-weight:600; color:{color};">{label}</td></tr>'
+        )
+    o = res["oos"]
+    otrs = "".join(
+        f'<tr style="border-top:1px solid var(--rule);"><td style="padding:5px 8px;">不人気と予測した上位{r["k"]}番号</td>'
+        f'<td style="padding:5px 8px; text-align:right; font-variant-numeric:tabular-nums;">{r["mean"]:.3f}±{r["se"]:.3f}</td>'
+        f'<td style="padding:5px 8px; text-align:right; font-weight:600; font-variant-numeric:tabular-nums;">{r["ret"]:.1f}%</td>'
+        f'<td style="padding:5px 8px; text-align:right; color:var(--ink-dim); font-variant-numeric:tabular-nums;">{r["n"]}回</td></tr>'
+        for r in o["rows"]
+    )
+    sp = res["split"]
+    return f"""<section class="section">
+  <div class="section-head">
+    <div>
+      <h2>人気度と期待値（買う人の偏り）</h2>
+      <p>当せん番号は完全にランダムでも、「買う人」の選び方には偏りがある。当せん金から人気度を推定（全{res["n"]}回）</p>
+    </div>
+  </div>
+  <div class="section-body">
+    <p style="margin:0 0 10px; font-size:.9rem;">
+      当たる確率はどの番号も1/1000で同じですが、当せん金は「売上÷当せん口数」なので、人気の番号ほど安くなります。
+      相対配当＝その特徴の番号が当たったときの当せん金（時期の売上変動を補正、全体平均=1.00）＝期待値の倍率。全体の還元率は約{res["overall_return"]:.1f}%です。
+    </p>
+    <div style="overflow-x:auto;">
+    <table style="width:100%; border-collapse:collapse; font-size:.85rem;">
+      <tr style="color:var(--ink-mute);"><th style="text-align:left; padding:4px 8px;">番号の特徴</th><th style="text-align:right; padding:4px 8px;">該当率</th><th style="text-align:left; padding:4px 8px;">1.00との差</th>
+      <th style="text-align:right; padding:4px 8px;">相対配当</th><th style="text-align:right; padding:4px 8px;">推定還元率</th><th></th></tr>
+      {"".join(trs)}
+    </table>
+    </div>
+    <p style="margin:10px 0 0; font-size:.82rem; color:var(--ink-dim);">
+      緑=不人気（当たれば高配当）、赤=人気（当たっても安い）。{res["m"]}件を検定（有意水準 0.05/{res["m"]}≒{res["threshold"]:.4f}）。特徴は互いに重なります（誕生日型は1・2・3を含みやすい等）。
+    </p>
+    <h3 style="margin:18px 0 6px; font-size:.95rem;">前向き検証（過去で選び、未来で測る）</h3>
+    <p style="margin:0 0 8px; font-size:.82rem; color:var(--ink-dim);">
+      前半{o["train_n"]}回だけで「不人気な番号」を予測 → 後半{o["test_n"]}回の実際の相対配当を測定。個別番号の人気も前半と後半で相関（r={sp["r"]:+.2f}, 番号{sp["k"]}個）し、偶然ではなく安定した構造です。
+    </p>
+    <div style="overflow-x:auto;">
+    <table style="width:100%; border-collapse:collapse; font-size:.85rem;">
+      <tr style="color:var(--ink-mute);"><th style="text-align:left; padding:4px 8px;">選び方</th><th style="text-align:right; padding:4px 8px;">後半の相対配当</th><th style="text-align:right; padding:4px 8px;">推定還元率</th><th style="text-align:right; padding:4px 8px;">当たり標本</th></tr>
+      {otrs}
+      <tr style="border-top:1px solid var(--rule);"><td style="padding:5px 8px; color:var(--ink-dim);">参考: 人気と予測した100番号</td><td></td><td style="padding:5px 8px; text-align:right; color:var(--ink-dim);">{o["popular_ret"]:.1f}%</td><td></td></tr>
+    </table>
+    </div>
+    <div style="margin-top:14px; padding:10px; background:color-mix(in srgb, var(--ink-mute) 10%, transparent); border-radius:4px; font-size:.85rem; color:var(--ink-dim);">
+      これは「当たりやすくなる」話ではなく、「当たったときの額が増える」話です。人気を避けても推定還元率は約{o["rows"][1]["ret"]:.0f}%で、100%には届きません（損失が減るだけ）。
+      還元率は選んだ番号を均等に買い続けた場合の平均で、1回ごとの結果は大きくぶれます。
+    </div>
+  </div>
+</section>"""
+
+
 def popularity_database_html(conn) -> str:
     """人気度データベースセクションを生成"""
     try:
@@ -1307,6 +1377,7 @@ def main():
     popularity_db_section = popularity_database_html(conn)
     theory_section = theory_vs_actual_html(conn)
     walk_forward_section = walk_forward_html(conn)
+    popularity_ev_section = popularity_ev_html(conn)
 
     pickup_summary = pickup_summary_html(pickup_groups) + pickup_offset_html(conn)
     pickup_history_visible = [pickup_card_html(g) for g in pickup_groups[1:1 + PICKUP_VISIBLE]]
@@ -1343,6 +1414,8 @@ def main():
   {theory_section}
 
   {walk_forward_section}
+
+  {popularity_ev_section}
 
   {popularity_db_section}
 

@@ -557,32 +557,29 @@ def today_pickup_table_html(group: dict, latest_draw_date: str, high_yield_set: 
 </div>"""
 
 
-def gap_filtered_pickup_html(conn, base_group, latest_draw_date: str, gap_res: dict, high_yield_set: set) -> dict:
-    """通常ピックアップの全候補のうち、当せん間隔の「強い／弱い区間」に経過回数が入る番号だけに絞った版。
-    戻り値: {"strong": html, "weak": html}（候補が無ければその旨の文）"""
-    from db_common import box_key_of
-    from predict import get_pickup_candidates, MIN_COUNT_FOR_INTERVAL
-    pool, _ = get_pickup_candidates(conn, MIN_COUNT_FOR_INTERVAL, 100000)
+def gap_filtered_pickup_html(gap_res: dict) -> dict:
+    """当せん間隔の「強い／弱い区間」に経過回数が入る番号を全件、グリッドで表示する。
+    通常ピックアップの処理（平均間隔・1桁条件・人気バッジ等）は使わない。
+    戻り値: {"strong": html, "weak": html}"""
     cur = gap_res["current"]
     out = {}
     for kind, name in (("strong", "強い"), ("weak", "弱い")):
         info = cur[kind]
-        in_bin = {k for k, _ in info["cands"]}
-        hit = [e for e in pool if e["key"] in in_bin][:10]
-        head = (f'<div class="misc-row" style="margin-bottom:10px">'
-                f'<b>{name}区間（{info["label"]}回・直近{cur["W"]}回の間隔分布でz={info["z"]:+.2f}）</b>に経過回数が入る番号を、'
-                f'通常ピックアップの全候補{len(pool)}個から抽出 → <b>{len(hit)}個</b>'
-                f'（区間内の全番号は{len(in_bin)}個）</div>')
-        if not hit or base_group is None:
-            out[kind] = head + "<p>この区間に入る通常ピックアップ候補はありません</p>"
-            continue
-        rows = []
-        for rank, e in enumerate(hit, start=1):
-            rows.append((base_group["based_on_draw_no"], base_group["target_draw_no"], rank, e["key"], box_key_of(e["key"]),
-                         e["win_count"], e["avg_interval"], e["draws_elapsed"],
-                         base_group["target_draw_date"], None, None, None, None))
-        group = {**base_group, "picks": rows}
-        out[kind] = head + today_pickup_table_html(group, latest_draw_date, high_yield_set, conn)
+        cands = info["cands"]  # [(番号, 経過回数)] 経過回数の多い順
+        cells = "".join(
+            f'<div style="border:1px solid var(--rule); border-radius:8px; padding:6px 4px; text-align:center; background:var(--surface-2);">'
+            f'<div style="font-family:\'IBM Plex Mono\',monospace; font-weight:600; font-size:1.05rem; color:var(--accent);">{k}</div>'
+            f'<div style="font-size:.72rem; color:var(--ink-dim); font-variant-numeric:tabular-nums;">{e}回</div></div>'
+            for k, e in cands
+        )
+        lo, hi = (min(e for _, e in cands), max(e for _, e in cands)) if cands else (0, 0)
+        out[kind] = (
+            f'<div style="margin-bottom:10px;"><b style="font-size:1rem;">{name}区間：{info["label"]}回</b>'
+            f'<span style="color:var(--ink-dim); font-size:.85rem;">　直近{cur["W"]}回の間隔分布で理論との差 z={info["z"]:+.2f}'
+            f'　／　該当 <b style="color:var(--ink);">{len(cands)}個</b>'
+            f'{f"　／　経過回数 {lo}〜{hi}回" if cands else ""}</span></div>'
+            f'<div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(78px,1fr)); gap:6px;">{cells}</div>'
+        )
     return out
 
 
@@ -1496,7 +1493,7 @@ def main():
     # 当せん間隔フィルタ版（強い区間／弱い区間）
     from gap_interval import run as gap_run
     gap_res = gap_run(conn)
-    gap_pickup = gap_filtered_pickup_html(conn, today_pickup_group, max_date, gap_res, high_yield_set)
+    gap_pickup = gap_filtered_pickup_html(gap_res)
 
     # デフォルト表示（フィルタなし）
     if today_pickup_group:
@@ -1678,7 +1675,7 @@ def main():
     <div class="section-head">
       <div>
         <h2>ピックアップ数字（間隔フィルタ版）</h2>
-        <p>通常のピックアップ候補のうち、経過回数が「当せん間隔の分布と現在の強弱」の強い／弱い区間に入る番号</p>
+        <p>最後の当せんからの経過回数が、現在の「強い／弱い間隔」の区間に入るストレート番号（全件・経過回数の多い順、第{gap_res["current"]["latest_draw_no"]}回時点）</p>
       </div>
     </div>
     <div class="section-body" id="pickup-gap">
@@ -1689,7 +1686,7 @@ def main():
       <div id="gap-filter-strong" style="display:block;">{gap_pickup["strong"]}</div>
       <div id="gap-filter-weak" style="display:none;">{gap_pickup["weak"]}</div>
       <div style="margin-top:12px; padding:10px; background:color-mix(in srgb, var(--ink-mute) 10%, transparent); border-radius:4px; font-size:.85rem; color:var(--ink-dim);">
-        「当せん間隔の分布と現在の強弱」の結果を絞り込みに使った版です。検証では、強い／弱い区間の近くの番号が次回当たりやすい証拠はありませんでした（的中は理論値と区別できず）。
+        次に当たると、その番号の再当せん間隔がこの区間になる番号の一覧です（通常ピックアップの条件は使っていません）。検証では、強い／弱い区間の近くの番号が次回当たりやすい証拠はありませんでした（的中は理論値と区別できず）。
         当たる確率は、どの番号も 1/1000 です。この版は履行履歴には記録されません。
       </div>
     </div>

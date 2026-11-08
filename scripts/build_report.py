@@ -1123,6 +1123,79 @@ def popularity_ev_html(conn) -> str:
 </section>"""
 
 
+def popularity_products_html(conn) -> str:
+    """商品別（ストレート・ボックス・ミニ）の人気度と、実際に買った場合の還元率（前向き検証）。"""
+    from popularity_products import run
+    res = run(conn)
+    badge = {0: ("範囲内", "var(--ink-dim)"), 1: ("補正前のみ", "var(--accent)"), 2: ("有意", "var(--area-2)")}
+    td = 'style="padding:5px 8px; text-align:right; font-variant-numeric:tabular-nums;"'
+    sum_rows = []
+    for pr in res["products"]:
+        fw = pr["forward"]
+        cells = "".join(
+            f'<td {td}>{r["ret"]:.1f}%<span style="color:var(--ink-mute);">±{r["se"]:.1f}</span> '
+            f'<span style="color:var(--ink-dim); font-size:.78rem;">(p={r["p"]:.3f})</span></td>' for r in fw["rows"]
+        )
+        sum_rows.append(
+            f'<tr style="border-top:1px solid var(--rule);"><td style="padding:5px 8px; font-weight:600;">{pr["label"]}</td>'
+            f'<td {td}>{fw["base"]:.1f}%</td>{cells}<td {td}>{fw["popular_ret"]:.1f}%</td></tr>'
+        )
+    details = []
+    for pr in res["products"]:
+        if pr["key"] == "straight":
+            continue
+        trs = []
+        for f in sorted(pr["features"], key=lambda x: -abs(x["mean"] - 1)):
+            label, color = badge[f["level"]]
+            ret = "-" if f["ret"] is None else f'{f["ret"]:.1f}%'
+            trs.append(
+                f'<tr style="border-top:1px solid var(--rule);"><td style="padding:4px 8px;">{f["name"]}</td>'
+                f'<td {td}>{f["share"]:.1f}%</td><td {td}>{f["mean"]:.3f}</td><td {td}>{ret}</td>'
+                f'<td style="padding:4px 8px; font-weight:600; color:{color};">{label}</td></tr>'
+            )
+        sp = pr["split"]
+        details.append(
+            f'<details style="border-top:1px solid var(--rule); padding:8px 0;"><summary style="cursor:pointer; font-weight:600;">'
+            f'{pr["label"]}の特徴別（{pr["n"]}回・{len(pr["features"])}件を検定・有意水準 p&lt;{pr["threshold"]:.4f}）</summary>'
+            f'<p style="margin:6px 0; font-size:.82rem; color:var(--ink-dim);">個別番号の人気の前半/後半相関 r={sp["r"]:+.2f}（{sp["k"]}個）。相対配当＝当たったときの当せん金（型ごと・時期補正済み、平均=1.00）</p>'
+            f'<table style="width:100%; border-collapse:collapse; font-size:.82rem;">'
+            f'<tr style="color:var(--ink-mute);"><th style="text-align:left; padding:3px 8px;">特徴</th><th style="text-align:right; padding:3px 8px;">該当率</th>'
+            f'<th style="text-align:right; padding:3px 8px;">相対配当</th><th style="text-align:right; padding:3px 8px;">推定還元率</th><th></th></tr>'
+            f'{"".join(trs)}</table></details>'
+        )
+    fw0 = res["products"][0]["forward"]
+    return f"""<section class="section">
+  <div class="section-head">
+    <div>
+      <h2>商品別の人気度（ストレート・ボックス・ミニ）</h2>
+      <p>どの商品でも「買う人の偏り」は同じ形で現れるか。実際に買い続けた場合の還元率で前向き検証</p>
+    </div>
+  </div>
+  <div class="section-body">
+    <p style="margin:0 0 8px; font-size:.88rem;">
+      前半60%（約{fw0["train_n"]}回）で「不人気な番号」を予測し、後半（約{fw0["test_n"]}回）で
+      <b>選んだ番号を毎回すべて買い続けた場合の実際の還元率</b>を直接計算（仮定なし）。差の検定は同じ回どうしを対にして行っています。
+    </p>
+    <div style="overflow-x:auto;">
+    <table style="width:100%; border-collapse:collapse; font-size:.85rem;">
+      <tr style="color:var(--ink-mute);"><th style="text-align:left; padding:4px 8px;">商品</th><th style="text-align:right; padding:4px 8px;">全番号を買う</th>
+      <th style="text-align:right; padding:4px 8px;">不人気上位10%</th><th style="text-align:right; padding:4px 8px;">上位20%</th><th style="text-align:right; padding:4px 8px;">上位50%</th>
+      <th style="text-align:right; padding:4px 8px;">人気10%（逆）</th></tr>
+      {"".join(sum_rows)}
+    </table>
+    </div>
+    <p style="margin:10px 0 12px; font-size:.82rem; color:var(--ink-dim);">
+      ±は標準誤差。標本が少ないほど選んだ番号の結果は運で大きくぶれます（上位10%は±3〜4ポイント）。9件を同時に検定しているため、p値は厳しめ（0.05/9≒0.0056）に見てください。
+    </p>
+    {"".join(details)}
+    <div style="margin-top:14px; padding:10px; background:color-mix(in srgb, var(--ink-mute) 10%, transparent); border-radius:4px; font-size:.85rem; color:var(--ink-dim);">
+      ストレート・ボックス・ミニのどれでも、人気の偏りは同じ向き（誕生日型・1/2/3を含む・ぞろ目は人気、0を含む・合計値が大きいは不人気）で出ます。
+      不人気な番号を選ぶと還元率は数ポイント上がりますが、100%には届きません。当たる確率そのものは変わりません。
+    </div>
+  </div>
+</section>"""
+
+
 def popularity_database_html(conn) -> str:
     """人気度データベースセクションを生成"""
     try:
@@ -1378,6 +1451,7 @@ def main():
     theory_section = theory_vs_actual_html(conn)
     walk_forward_section = walk_forward_html(conn)
     popularity_ev_section = popularity_ev_html(conn)
+    popularity_products_section = popularity_products_html(conn)
 
     pickup_summary = pickup_summary_html(pickup_groups) + pickup_offset_html(conn)
     pickup_history_visible = [pickup_card_html(g) for g in pickup_groups[1:1 + PICKUP_VISIBLE]]
@@ -1416,6 +1490,8 @@ def main():
   {walk_forward_section}
 
   {popularity_ev_section}
+
+  {popularity_products_section}
 
   {popularity_db_section}
 

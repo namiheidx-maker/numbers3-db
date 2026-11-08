@@ -500,7 +500,6 @@ table.history td.no{font-family:"IBM Plex Mono",monospace; color:var(--ink-mute)
       <div style="display:flex; gap:8px;">
         <button class="mode-btn is-active" onclick="switchPickupMode('normal')" style="font-size:.9rem; padding:6px 12px;">通常モード<br/>（的中率重視）</button>
         <button class="mode-btn" onclick="switchPickupMode('high_yield')" style="font-size:.9rem; padding:6px 12px;">高額狙い<br/>（配当重視）</button>
-        <button class="mode-btn" onclick="switchPickupMode('gap')" style="font-size:.9rem; padding:6px 12px;">間隔フィルタ<br/>（強弱区間）</button>
       </div>
     </div>
     
@@ -776,9 +775,38 @@ table.history td.no{font-family:"IBM Plex Mono",monospace; color:var(--ink-mute)
 <tr><td class="hl-id">3</td><td class="hl-num">002</td><td class="hl-count">4回<br/><span style="font-size:.8rem; color:var(--ink-mute);">不人気</span></td></tr>
 <tr><td class="hl-id">4</td><td class="hl-num">010</td><td class="hl-count">3回<br/><span style="font-size:.8rem; color:var(--ink-mute);">不人気</span></td></tr></tbody></table>
     </div>
+  </section>
 
-    <!-- 間隔フィルタモード -->
-    <div class="section-body" id="pickup-gap" style="display:none;">
+  <script>
+    function switchPickupMode(mode) {
+      document.getElementById('pickup-normal').style.display = mode === 'normal' ? 'block' : 'none';
+      document.getElementById('pickup-high-yield').style.display = mode === 'high_yield' ? 'block' : 'none';
+      document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('is-active'));
+      event.target.closest('.mode-btn').classList.add('is-active');
+    }
+
+    function switchGapFilter(kind) {
+      ['strong', 'weak'].forEach(k => document.getElementById('gap-filter-' + k).style.display = k === kind ? 'block' : 'none');
+      document.querySelectorAll('.gap-filter-btn').forEach(btn => btn.classList.remove('is-active'));
+      event.target.classList.add('is-active');
+    }
+
+    function switchAreaFilter(window_type) {
+      document.querySelectorAll('[id^="area-filter-"]').forEach(el => el.style.display = 'none');
+      document.getElementById('area-filter-' + window_type).style.display = 'block';
+      document.querySelectorAll('.area-filter-btn').forEach(btn => btn.classList.remove('is-active'));
+      event.target.classList.add('is-active');
+    }
+  </script>
+
+  <section class="section">
+    <div class="section-head">
+      <div>
+        <h2>ピックアップ数字（間隔フィルタ版）</h2>
+        <p>通常のピックアップ候補のうち、経過回数が「当せん間隔の分布と現在の強弱」の強い／弱い区間に入る番号</p>
+      </div>
+    </div>
+    <div class="section-body" id="pickup-gap">
       <div style="display:flex; gap:6px; margin-bottom:12px; border-bottom:1px solid var(--rule); padding-bottom:8px;">
         <button class="gap-filter-btn area-filter-btn is-active" onclick="switchGapFilter('strong')">強い区間</button>
         <button class="gap-filter-btn area-filter-btn" onclick="switchGapFilter('weak')">弱い区間</button>
@@ -825,29 +853,6 @@ table.history td.no{font-family:"IBM Plex Mono",monospace; color:var(--ink-mute)
       </div>
     </div>
   </section>
-
-  <script>
-    function switchPickupMode(mode) {
-      document.getElementById('pickup-normal').style.display = mode === 'normal' ? 'block' : 'none';
-      document.getElementById('pickup-high-yield').style.display = mode === 'high_yield' ? 'block' : 'none';
-      document.getElementById('pickup-gap').style.display = mode === 'gap' ? 'block' : 'none';
-      document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('is-active'));
-      event.target.closest('.mode-btn').classList.add('is-active');
-    }
-
-    function switchGapFilter(kind) {
-      ['strong', 'weak'].forEach(k => document.getElementById('gap-filter-' + k).style.display = k === kind ? 'block' : 'none');
-      document.querySelectorAll('.gap-filter-btn').forEach(btn => btn.classList.remove('is-active'));
-      event.target.classList.add('is-active');
-    }
-
-    function switchAreaFilter(window_type) {
-      document.querySelectorAll('[id^="area-filter-"]').forEach(el => el.style.display = 'none');
-      document.getElementById('area-filter-' + window_type).style.display = 'block';
-      document.querySelectorAll('.area-filter-btn').forEach(btn => btn.classList.remove('is-active'));
-      event.target.classList.add('is-active');
-    }
-  </script>
 
   <section class="section">
     <div class="section-head">

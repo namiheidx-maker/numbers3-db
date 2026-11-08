@@ -1625,7 +1625,6 @@ def main():
       <div style="display:flex; gap:8px;">
         <button class="mode-btn is-active" onclick="switchPickupMode('normal')" style="font-size:.9rem; padding:6px 12px;">通常モード<br/>（的中率重視）</button>
         <button class="mode-btn" onclick="switchPickupMode('high_yield')" style="font-size:.9rem; padding:6px 12px;">高額狙い<br/>（配当重視）</button>
-        <button class="mode-btn" onclick="switchPickupMode('gap')" style="font-size:.9rem; padding:6px 12px;">間隔フィルタ<br/>（強弱区間）</button>
       </div>
     </div>
     {trend_summary}
@@ -1651,27 +1650,12 @@ def main():
     <div class="section-body" id="pickup-high-yield" style="display:none;">
       {today_pickup_card_high_yield}
     </div>
-
-    <!-- 間隔フィルタモード -->
-    <div class="section-body" id="pickup-gap" style="display:none;">
-      <div style="display:flex; gap:6px; margin-bottom:12px; border-bottom:1px solid var(--rule); padding-bottom:8px;">
-        <button class="gap-filter-btn area-filter-btn is-active" onclick="switchGapFilter('strong')">強い区間</button>
-        <button class="gap-filter-btn area-filter-btn" onclick="switchGapFilter('weak')">弱い区間</button>
-      </div>
-      <div id="gap-filter-strong" style="display:block;">{gap_pickup["strong"]}</div>
-      <div id="gap-filter-weak" style="display:none;">{gap_pickup["weak"]}</div>
-      <div style="margin-top:12px; padding:10px; background:color-mix(in srgb, var(--ink-mute) 10%, transparent); border-radius:4px; font-size:.85rem; color:var(--ink-dim);">
-        「当せん間隔の分布と現在の強弱」の結果を絞り込みに使った版です。検証では、強い／弱い区間の近くの番号が次回当たりやすい証拠はありませんでした（的中は理論値と区別できず）。
-        当たる確率は、どの番号も 1/1000 です。この版は履行履歴には記録されません。
-      </div>
-    </div>
   </section>
 
   <script>
     function switchPickupMode(mode) {{
       document.getElementById('pickup-normal').style.display = mode === 'normal' ? 'block' : 'none';
       document.getElementById('pickup-high-yield').style.display = mode === 'high_yield' ? 'block' : 'none';
-      document.getElementById('pickup-gap').style.display = mode === 'gap' ? 'block' : 'none';
       document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('is-active'));
       event.target.closest('.mode-btn').classList.add('is-active');
     }}
@@ -1689,6 +1673,27 @@ def main():
       event.target.classList.add('is-active');
     }}
   </script>
+
+  <section class="section">
+    <div class="section-head">
+      <div>
+        <h2>ピックアップ数字（間隔フィルタ版）</h2>
+        <p>通常のピックアップ候補のうち、経過回数が「当せん間隔の分布と現在の強弱」の強い／弱い区間に入る番号</p>
+      </div>
+    </div>
+    <div class="section-body" id="pickup-gap">
+      <div style="display:flex; gap:6px; margin-bottom:12px; border-bottom:1px solid var(--rule); padding-bottom:8px;">
+        <button class="gap-filter-btn area-filter-btn is-active" onclick="switchGapFilter('strong')">強い区間</button>
+        <button class="gap-filter-btn area-filter-btn" onclick="switchGapFilter('weak')">弱い区間</button>
+      </div>
+      <div id="gap-filter-strong" style="display:block;">{gap_pickup["strong"]}</div>
+      <div id="gap-filter-weak" style="display:none;">{gap_pickup["weak"]}</div>
+      <div style="margin-top:12px; padding:10px; background:color-mix(in srgb, var(--ink-mute) 10%, transparent); border-radius:4px; font-size:.85rem; color:var(--ink-dim);">
+        「当せん間隔の分布と現在の強弱」の結果を絞り込みに使った版です。検証では、強い／弱い区間の近くの番号が次回当たりやすい証拠はありませんでした（的中は理論値と区別できず）。
+        当たる確率は、どの番号も 1/1000 です。この版は履行履歴には記録されません。
+      </div>
+    </div>
+  </section>
 
   <section class="section">
     <div class="section-head">

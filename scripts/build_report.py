@@ -1196,6 +1196,89 @@ def popularity_products_html(conn) -> str:
 </section>"""
 
 
+def gap_interval_html(conn) -> str:
+    """当せん間隔の分布・現在の強弱・候補番号・ウォークフォワード検証セクション。"""
+    from gap_interval import run
+    res = run(conn)
+    d, cur = res["dist"], res["current"]
+    mx = max(max(d["obs"]), max(d["exp"])) or 1
+    dist_rows = "".join(
+        f'<tr><td style="padding:3px 8px; white-space:nowrap;">{l}回</td>'
+        f'<td style="padding:3px 8px; width:50%;"><div style="height:8px; width:{o / mx * 100:.1f}%; background:var(--accent); border-radius:2px;"></div>'
+        f'<div style="height:4px; margin-top:2px; width:{e / mx * 100:.1f}%; background:var(--ink-mute); border-radius:2px;"></div></td>'
+        f'<td style="padding:3px 8px; text-align:right; font-variant-numeric:tabular-nums;">{int(o)}</td>'
+        f'<td style="padding:3px 8px; text-align:right; color:var(--ink-dim); font-variant-numeric:tabular-nums;">{e:.0f}</td></tr>'
+        for l, o, e in zip(d["labels"], d["obs"], d["exp"])
+    )
+    zmax = max(abs(z) for z in cur["zs"]) or 1
+    zrows = ""
+    for i, (l, z) in enumerate(zip(d["labels"], cur["zs"])):
+        tag = " ◀強い" if l == cur["strong"]["label"] else (" ◀弱い" if l == cur["weak"]["label"] else "")
+        color = "var(--area-3)" if z >= 0 else "var(--area-2)"
+        zrows += (
+            f'<tr><td style="padding:2px 8px; white-space:nowrap;">{l}回</td>'
+            f'<td style="padding:2px 8px; width:50%;"><div style="height:7px; width:{abs(z) / zmax * 100:.1f}%; background:{color}; border-radius:2px;"></div></td>'
+            f'<td style="padding:2px 8px; text-align:right; font-variant-numeric:tabular-nums;">{z:+.2f}</td>'
+            f'<td style="padding:2px 8px; font-weight:600;">{tag}</td></tr>'
+        )
+
+    def chips(items, limit=40):
+        shown = "".join(
+            f'<span style="display:inline-block; margin:2px 4px 2px 0; padding:2px 8px; border:1px solid var(--rule); border-radius:6px; '
+            f'font-family:\'IBM Plex Mono\',monospace; font-size:.8rem;">{k}<span style="color:var(--ink-mute); font-size:.7rem;"> {e}回</span></span>'
+            for k, e in items[:limit]
+        )
+        more = f'<span style="color:var(--ink-dim); font-size:.8rem;">…ほか{len(items) - limit}個</span>' if len(items) > limit else ""
+        return shown + more
+
+    trs = []
+    badge = {0: ("範囲内", "var(--ink-dim)"), 1: ("補正前のみ", "var(--accent)"), 2: ("有意", "var(--area-2)")}
+    for t in res["tests"]:
+        label, color = badge[t["level"]]
+        w = f'直近{t["W"]}回' if t["W"] else "-"
+        trs.append(
+            f'<tr style="border-top:1px solid var(--rule);"><td style="padding:5px 8px;">{t["name"]}</td>'
+            f'<td style="padding:5px 8px; color:var(--ink-dim);">{w}</td>'
+            f'<td style="padding:5px 8px; text-align:right; font-variant-numeric:tabular-nums;">{t["hits"]}</td>'
+            f'<td style="padding:5px 8px; text-align:right; color:var(--ink-dim); font-variant-numeric:tabular-nums;">{t["exp"]:.1f}</td>'
+            f'<td style="padding:5px 8px; text-align:right; font-variant-numeric:tabular-nums;">p={t["p"]:.3f}</td>'
+            f'<td style="padding:5px 8px; font-weight:600; color:{color};">{label}</td></tr>'
+        )
+    return f"""<section class="section">
+  <div class="section-head">
+    <div>
+      <h2>当せん間隔の分布と現在の強弱</h2>
+      <p>同じストレート番号が再び当せんするまでの回数の分布。今どの間隔が強い／弱いか、その近くの番号は何か（第{cur["latest_draw_no"]}回時点）</p>
+    </div>
+  </div>
+  <div class="section-body">
+    <h3 style="margin:0 0 6px; font-size:.95rem;">全期間の間隔分布（{d["total"]}件）vs 理論</h3>
+    <p style="margin:0 0 6px; font-size:.82rem; color:var(--ink-dim);">上段=実績 / 下段=理論（有限期間を補正した幾何分布）。χ²={d["chi2"]:.1f}（df={d["df"]}）、p={d["p"]:.2f} → 理論と整合</p>
+    <div style="overflow-x:auto;"><table style="width:100%; border-collapse:collapse; font-size:.82rem;">{dist_rows}</table></div>
+
+    <h3 style="margin:18px 0 6px; font-size:.95rem;">現在の強弱（直近{cur["W"]}回に終わった間隔・理論との差のz値）</h3>
+    <p style="margin:0 0 6px; font-size:.82rem; color:var(--ink-dim);">緑=理論より多い（強い）、赤=少ない（弱い）。|z|が2未満なら偶然の範囲です。</p>
+    <div style="overflow-x:auto;"><table style="width:100%; border-collapse:collapse; font-size:.82rem;">{zrows}</table></div>
+    <p style="margin:12px 0 4px; font-size:.88rem;"><b>強い区間（{cur["strong"]["label"]}回, z={cur["strong"]["z"]:+.2f}）に入る番号 {len(cur["strong"]["cands"])}個</b>（経過回数の多い順）</p>
+    <div>{chips(cur["strong"]["cands"])}</div>
+    <p style="margin:12px 0 4px; font-size:.88rem;"><b>弱い区間（{cur["weak"]["label"]}回, z={cur["weak"]["z"]:+.2f}）に入る番号 {len(cur["weak"]["cands"])}個</b></p>
+    <div>{chips(cur["weak"]["cands"])}</div>
+
+    <h3 style="margin:18px 0 6px; font-size:.95rem;">過去で選び、未来で測る（次回当せんが候補に入った回数）</h3>
+    <p style="margin:0 0 6px; font-size:.82rem; color:var(--ink-dim);">各時点で候補を選び、次回の当せん番号が入った回数を理論値（Σ 候補数÷1000）と比較。{len(res["tests"])}件を検定（有意水準 0.05/{len(res["tests"])}≒{res["threshold"]:.4f}）。</p>
+    <div style="overflow-x:auto;"><table style="width:100%; border-collapse:collapse; font-size:.85rem;">
+      <tr style="color:var(--ink-mute);"><th style="text-align:left; padding:4px 8px;">選び方</th><th style="text-align:left; padding:4px 8px;">窓</th>
+      <th style="text-align:right; padding:4px 8px;">的中</th><th style="text-align:right; padding:4px 8px;">理論</th><th></th><th></th></tr>
+      {"".join(trs)}
+    </table></div>
+    <div style="margin-top:14px; padding:10px; background:color-mix(in srgb, var(--ink-mute) 10%, transparent); border-radius:4px; font-size:.85rem; color:var(--ink-dim);">
+      同じ番号の再当せんは、前回から何回経っても確率が変わりません（無記憶）。そのため強弱は窓ごとに必ず現れますが次回を予測せず、
+      検証でも的中は理論値と区別できません。候補番号を選んでも、当たる確率はどの番号も 1/1000 のままです。
+    </div>
+  </div>
+</section>"""
+
+
 def popularity_database_html(conn) -> str:
     """人気度データベースセクションを生成"""
     try:
@@ -1452,6 +1535,7 @@ def main():
     walk_forward_section = walk_forward_html(conn)
     popularity_ev_section = popularity_ev_html(conn)
     popularity_products_section = popularity_products_html(conn)
+    gap_interval_section = gap_interval_html(conn)
 
     pickup_summary = pickup_summary_html(pickup_groups) + pickup_offset_html(conn)
     pickup_history_visible = [pickup_card_html(g) for g in pickup_groups[1:1 + PICKUP_VISIBLE]]
@@ -1492,6 +1576,8 @@ def main():
   {popularity_ev_section}
 
   {popularity_products_section}
+
+  {gap_interval_section}
 
   {popularity_db_section}
 

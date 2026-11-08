@@ -557,6 +557,35 @@ def today_pickup_table_html(group: dict, latest_draw_date: str, high_yield_set: 
 </div>"""
 
 
+def gap_filtered_pickup_html(conn, base_group, latest_draw_date: str, gap_res: dict, high_yield_set: set) -> dict:
+    """通常ピックアップの全候補のうち、当せん間隔の「強い／弱い区間」に経過回数が入る番号だけに絞った版。
+    戻り値: {"strong": html, "weak": html}（候補が無ければその旨の文）"""
+    from db_common import box_key_of
+    from predict import get_pickup_candidates, MIN_COUNT_FOR_INTERVAL
+    pool, _ = get_pickup_candidates(conn, MIN_COUNT_FOR_INTERVAL, 100000)
+    cur = gap_res["current"]
+    out = {}
+    for kind, name in (("strong", "強い"), ("weak", "弱い")):
+        info = cur[kind]
+        in_bin = {k for k, _ in info["cands"]}
+        hit = [e for e in pool if e["key"] in in_bin][:10]
+        head = (f'<div class="misc-row" style="margin-bottom:10px">'
+                f'<b>{name}区間（{info["label"]}回・直近{cur["W"]}回の間隔分布でz={info["z"]:+.2f}）</b>に経過回数が入る番号を、'
+                f'通常ピックアップの全候補{len(pool)}個から抽出 → <b>{len(hit)}個</b>'
+                f'（区間内の全番号は{len(in_bin)}個）</div>')
+        if not hit or base_group is None:
+            out[kind] = head + "<p>この区間に入る通常ピックアップ候補はありません</p>"
+            continue
+        rows = []
+        for rank, e in enumerate(hit, start=1):
+            rows.append((base_group["based_on_draw_no"], base_group["target_draw_no"], rank, e["key"], box_key_of(e["key"]),
+                         e["win_count"], e["avg_interval"], e["draws_elapsed"],
+                         base_group["target_draw_date"], None, None, None, None))
+        group = {**base_group, "picks": rows}
+        out[kind] = head + today_pickup_table_html(group, latest_draw_date, high_yield_set, conn)
+    return out
+
+
 def pickup_card_html(group: dict) -> str:
     has_result = group["actual_number"] is not None
     any_straight_hit = has_result and any(r[11] for r in group["picks"])
@@ -1196,10 +1225,11 @@ def popularity_products_html(conn) -> str:
 </section>"""
 
 
-def gap_interval_html(conn) -> str:
+def gap_interval_html(conn, res=None) -> str:
     """当せん間隔の分布・現在の強弱・候補番号・ウォークフォワード検証セクション。"""
-    from gap_interval import run
-    res = run(conn)
+    if res is None:
+        from gap_interval import run
+        res = run(conn)
     d, cur = res["dist"], res["current"]
     mx = max(max(d["obs"]), max(d["exp"])) or 1
     dist_rows = "".join(
@@ -1463,6 +1493,11 @@ def main():
             else:
                 pickup_area_versions[str(window)] = f"<p>直近{window}回の推奨エリアに候補がありません</p>"
 
+    # 当せん間隔フィルタ版（強い区間／弱い区間）
+    from gap_interval import run as gap_run
+    gap_res = gap_run(conn)
+    gap_pickup = gap_filtered_pickup_html(conn, today_pickup_group, max_date, gap_res, high_yield_set)
+
     # デフォルト表示（フィルタなし）
     if today_pickup_group:
         today_pickup_card = pickup_area_versions.get("none", "<p>ピックアップ対象がありません</p>")
@@ -1535,7 +1570,7 @@ def main():
     walk_forward_section = walk_forward_html(conn)
     popularity_ev_section = popularity_ev_html(conn)
     popularity_products_section = popularity_products_html(conn)
-    gap_interval_section = gap_interval_html(conn)
+    gap_interval_section = gap_interval_html(conn, gap_res)
 
     pickup_summary = pickup_summary_html(pickup_groups) + pickup_offset_html(conn)
     pickup_history_visible = [pickup_card_html(g) for g in pickup_groups[1:1 + PICKUP_VISIBLE]]
@@ -1590,6 +1625,7 @@ def main():
       <div style="display:flex; gap:8px;">
         <button class="mode-btn is-active" onclick="switchPickupMode('normal')" style="font-size:.9rem; padding:6px 12px;">通常モード<br/>（的中率重視）</button>
         <button class="mode-btn" onclick="switchPickupMode('high_yield')" style="font-size:.9rem; padding:6px 12px;">高額狙い<br/>（配当重視）</button>
+        <button class="mode-btn" onclick="switchPickupMode('gap')" style="font-size:.9rem; padding:6px 12px;">間隔フィルタ<br/>（強弱区間）</button>
       </div>
     </div>
     {trend_summary}
@@ -1615,14 +1651,35 @@ def main():
     <div class="section-body" id="pickup-high-yield" style="display:none;">
       {today_pickup_card_high_yield}
     </div>
+
+    <!-- 間隔フィルタモード -->
+    <div class="section-body" id="pickup-gap" style="display:none;">
+      <div style="display:flex; gap:6px; margin-bottom:12px; border-bottom:1px solid var(--rule); padding-bottom:8px;">
+        <button class="gap-filter-btn area-filter-btn is-active" onclick="switchGapFilter('strong')">強い区間</button>
+        <button class="gap-filter-btn area-filter-btn" onclick="switchGapFilter('weak')">弱い区間</button>
+      </div>
+      <div id="gap-filter-strong" style="display:block;">{gap_pickup["strong"]}</div>
+      <div id="gap-filter-weak" style="display:none;">{gap_pickup["weak"]}</div>
+      <div style="margin-top:12px; padding:10px; background:color-mix(in srgb, var(--ink-mute) 10%, transparent); border-radius:4px; font-size:.85rem; color:var(--ink-dim);">
+        「当せん間隔の分布と現在の強弱」の結果を絞り込みに使った版です。検証では、強い／弱い区間の近くの番号が次回当たりやすい証拠はありませんでした（的中は理論値と区別できず）。
+        当たる確率は、どの番号も 1/1000 です。この版は履行履歴には記録されません。
+      </div>
+    </div>
   </section>
 
   <script>
     function switchPickupMode(mode) {{
       document.getElementById('pickup-normal').style.display = mode === 'normal' ? 'block' : 'none';
       document.getElementById('pickup-high-yield').style.display = mode === 'high_yield' ? 'block' : 'none';
+      document.getElementById('pickup-gap').style.display = mode === 'gap' ? 'block' : 'none';
       document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('is-active'));
       event.target.closest('.mode-btn').classList.add('is-active');
+    }}
+
+    function switchGapFilter(kind) {{
+      ['strong', 'weak'].forEach(k => document.getElementById('gap-filter-' + k).style.display = k === kind ? 'block' : 'none');
+      document.querySelectorAll('.gap-filter-btn').forEach(btn => btn.classList.remove('is-active'));
+      event.target.classList.add('is-active');
     }}
 
     function switchAreaFilter(window_type) {{

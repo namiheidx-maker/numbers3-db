@@ -1001,6 +1001,58 @@ def theory_vs_actual_html(conn) -> str:
 </section>"""
 
 
+def walk_forward_html(conn) -> str:
+    """一時的な偏り（ホット/コールド）が次に続くかのウォークフォワード検証セクション。"""
+    from walk_forward_bias import run
+    res = run(conn)
+    badge = {0: ("範囲内", "var(--ink-dim)"), 1: ("補正前のみ有意", "var(--accent)"), 2: ("有意(補正後)", "var(--area-2)")}
+    trs = []
+    for t in res["results"]:
+        label, color = badge[t["level"]]
+        unit = "" if t.get("is_r") else "%"
+        fmt = "{:+.3f}" if t.get("is_r") else "{:.2f}"
+        trs.append(
+            f'<tr style="border-top:1px solid var(--rule);">'
+            f'<td style="padding:5px 8px;">直近{t["W"]}回</td>'
+            f'<td style="padding:5px 8px;">{t["kind"]}</td>'
+            f'<td style="padding:5px 8px; text-align:right; font-variant-numeric:tabular-nums;">{fmt.format(t["obs"])}{unit}</td>'
+            f'<td style="padding:5px 8px; text-align:right; color:var(--ink-dim); font-variant-numeric:tabular-nums;">{fmt.format(t["exp"])}{unit}</td>'
+            f'<td style="padding:5px 8px; text-align:right; color:var(--ink-dim); font-variant-numeric:tabular-nums;">p={t["p"]:.3f}</td>'
+            f'<td style="padding:5px 8px; font-weight:600; color:{color};">{label}</td></tr>'
+        )
+    blk = " / ".join(f'{b["W"]}回窓 {b["pct"]:.1f}%（{b["sig"]}/{b["tot"]}）' for b in res["blocks"])
+    sig2 = sum(1 for t in res["results"] if t["level"] == 2)
+    sig1 = sum(1 for t in res["results"] if t["level"] == 1)
+    return f"""<section class="section">
+  <div class="section-head">
+    <div>
+      <h2>一時的な偏りは続くか（ウォークフォワード検証）</h2>
+      <p>直近の窓で最多/最少だった数字（桁別）が次に出る率、偏りが次の期間に持続する度合い（全{res["n"]}回）</p>
+    </div>
+  </div>
+  <div class="section-body">
+    <p style="margin:0 0 10px; font-size:.9rem;">
+      {res["m"]}件を検定: 補正後に有意 <b>{sig2}</b>件 / 補正前のみ有意 <b>{sig1}</b>件 / 範囲内 <b>{res["m"] - sig1 - sig2}</b>件
+      （有意水準 0.05/{res["m"]}≒{res["threshold"]:.4f}）
+    </p>
+    <div style="overflow-x:auto;">
+    <table style="width:100%; border-collapse:collapse; font-size:.85rem;">
+      <tr style="color:var(--ink-mute);"><th style="text-align:left; padding:4px 8px;">窓</th><th style="text-align:left; padding:4px 8px;">指標</th>
+      <th style="text-align:right; padding:4px 8px;">実績</th><th style="text-align:right; padding:4px 8px;">理論</th><th></th><th></th></tr>
+      {"".join(trs)}
+    </table>
+    </div>
+    <p style="margin:12px 0 0; font-size:.85rem; color:var(--ink-dim);">
+      参考: 非重複ブロックのうち「偏りあり(χ²検定 p&lt;0.05)」に見えた割合 {blk}。完全な乱数でも約5%は偏って見えます。
+    </p>
+    <div style="margin-top:14px; padding:10px; background:color-mix(in srgb, var(--ink-mute) 10%, transparent); border-radius:4px; font-size:.85rem; color:var(--ink-dim);">
+      一時的な偏りは「窓を区切れば必ず見える」ものですが、その偏りが次に続くか（ホット数字が次も出やすいか）を測ると、理論値と区別できるかどうかがわかります。
+      的中率は桁ごとに選んだ数字の次回一致率（理論10%）で、過去の情報のみで選ぶため二項検定が厳密に成り立ちます。
+    </div>
+  </div>
+</section>"""
+
+
 def popularity_database_html(conn) -> str:
     """人気度データベースセクションを生成"""
     try:
@@ -1254,6 +1306,7 @@ def main():
     # 人気度データベースセクションを生成
     popularity_db_section = popularity_database_html(conn)
     theory_section = theory_vs_actual_html(conn)
+    walk_forward_section = walk_forward_html(conn)
 
     pickup_summary = pickup_summary_html(pickup_groups) + pickup_offset_html(conn)
     pickup_history_visible = [pickup_card_html(g) for g in pickup_groups[1:1 + PICKUP_VISIBLE]]
@@ -1288,6 +1341,8 @@ def main():
   {area_streak_section}
 
   {theory_section}
+
+  {walk_forward_section}
 
   {popularity_db_section}
 

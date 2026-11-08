@@ -981,6 +981,17 @@ def area_analysis_html(area_stats_by_periods: dict) -> str:
 </section>"""
 
 
+def safe_section(name: str, fn, *args) -> str:
+    """分析セクションの生成に失敗しても、ダッシュボード全体の更新（データ更新・他セクション）を止めない。
+    失敗は標準エラーに出力し（Actionsのログで確認可能）、画面には生成不可の旨を表示する。"""
+    try:
+        return fn(*args)
+    except Exception as e:  # noqa: BLE001
+        print(f"[警告] セクション「{name}」の生成に失敗: {type(e).__name__}: {e}", file=sys.stderr)
+        return (f'<section class="section"><div class="section-head"><div><h2>{name}</h2>'
+                f'<p>今回の更新では生成できませんでした（{type(e).__name__}）。次回の更新で再試行されます。</p></div></div></section>')
+
+
 def theory_vs_actual_html(conn) -> str:
     """手法別「理論値 vs 実績」検定セクション（全履歴・カイ二乗検定・Bonferroni補正）。"""
     from theory_vs_actual import run
@@ -1506,13 +1517,17 @@ def main():
                 pickup_area_versions[str(window)] = f"<p>直近{window}回の推奨エリアに候補がありません</p>"
 
     # 当せん間隔フィルタ版（強い区間／弱い区間）
-    from gap_interval import run as gap_run
-    gap_res = gap_run(conn)
-    gap_pickup = gap_filtered_pickup_html(gap_res)
+    try:
+        from gap_interval import run as gap_run
+        gap_res = gap_run(conn)
+        gap_pickup = gap_filtered_pickup_html(gap_res)
+    except Exception as e:  # noqa: BLE001
+        print(f"[警告] 当せん間隔の分析に失敗: {type(e).__name__}: {e}", file=sys.stderr)
+        gap_res, gap_pickup = None, {}
     gap_blocks = "".join(
         f'<div id="gapblk-{k}-{a}" style="display:{"block" if (k, a) == ("strong", "all") else "none"};">{h}</div>'
         for (k, a), h in gap_pickup.items()
-    )
+    ) or "<p>今回の更新では生成できませんでした。次回の更新で再試行されます。</p>"
 
     # デフォルト表示（フィルタなし）
     if today_pickup_group:
@@ -1582,11 +1597,12 @@ def main():
 
     # 人気度データベースセクションを生成
     popularity_db_section = popularity_database_html(conn)
-    theory_section = theory_vs_actual_html(conn)
-    walk_forward_section = walk_forward_html(conn)
-    popularity_ev_section = popularity_ev_html(conn)
-    popularity_products_section = popularity_products_html(conn)
-    gap_interval_section = gap_interval_html(conn, gap_res)
+    theory_section = safe_section("手法別 理論値 vs 実績", theory_vs_actual_html, conn)
+    walk_forward_section = safe_section("一時的な偏りは続くか（ウォークフォワード検証）", walk_forward_html, conn)
+    popularity_ev_section = safe_section("人気度と期待値（買う人の偏り）", popularity_ev_html, conn)
+    popularity_products_section = safe_section("商品別の人気度（ストレート・ボックス・ミニ）", popularity_products_html, conn)
+    gap_interval_section = (safe_section("当せん間隔の分布と現在の強弱", gap_interval_html, conn, gap_res) if gap_res
+                            else safe_section("当せん間隔の分布と現在の強弱", lambda: (_ for _ in ()).throw(RuntimeError("分析結果なし"))))
 
     pickup_summary = pickup_summary_html(pickup_groups) + pickup_offset_html(conn)
     pickup_history_visible = [pickup_card_html(g) for g in pickup_groups[1:1 + PICKUP_VISIBLE]]
@@ -1697,7 +1713,7 @@ def main():
     <div class="section-head">
       <div>
         <h2>ピックアップ数字（間隔フィルタ版）</h2>
-        <p>最後の当せんからの経過回数が、現在の「強い／弱い間隔」の区間に入るストレート番号（全件・経過回数の多い順、第{gap_res["current"]["latest_draw_no"]}回時点）</p>
+        <p>最後の当せんからの経過回数が、現在の「強い／弱い間隔」の区間に入るストレート番号（全件・経過回数の多い順、第{latest_draw_no}回時点）</p>
       </div>
     </div>
     <div class="section-body" id="pickup-gap">

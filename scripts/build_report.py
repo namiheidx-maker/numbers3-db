@@ -557,29 +557,44 @@ def today_pickup_table_html(group: dict, latest_draw_date: str, high_yield_set: 
 </div>"""
 
 
+GAP_AREAS = (("all", "すべて"), ("1", "000〜333"), ("2", "334〜666"), ("3", "667〜999"))
+
+
+def gap_area_of(number: str) -> str:
+    n = int(number)
+    return "1" if n <= 333 else ("2" if n <= 666 else "3")
+
+
 def gap_filtered_pickup_html(gap_res: dict) -> dict:
-    """当せん間隔の「強い／弱い区間」に経過回数が入る番号を全件、グリッドで表示する。
+    """当せん間隔の「強い／弱い区間」に経過回数が入る番号を、3エリアで絞れる形で全件グリッド表示する。
     通常ピックアップの処理（平均間隔・1桁条件・人気バッジ等）は使わない。
-    戻り値: {"strong": html, "weak": html}"""
+    戻り値: {(kind, area): html}  kind=strong|weak, area=all|1|2|3"""
     cur = gap_res["current"]
     out = {}
+    area_label = dict(GAP_AREAS)
     for kind, name in (("strong", "強い"), ("weak", "弱い")):
         info = cur[kind]
-        cands = info["cands"]  # [(番号, 経過回数)] 経過回数の多い順
-        cells = "".join(
-            f'<div style="border:1px solid var(--rule); border-radius:8px; padding:6px 4px; text-align:center; background:var(--surface-2);">'
-            f'<div style="font-family:\'IBM Plex Mono\',monospace; font-weight:600; font-size:1.05rem; color:var(--accent);">{k}</div>'
-            f'<div style="font-size:.72rem; color:var(--ink-dim); font-variant-numeric:tabular-nums;">{e}回</div></div>'
-            for k, e in cands
-        )
-        lo, hi = (min(e for _, e in cands), max(e for _, e in cands)) if cands else (0, 0)
-        out[kind] = (
-            f'<div style="margin-bottom:10px;"><b style="font-size:1rem;">{name}区間：{info["label"]}回</b>'
-            f'<span style="color:var(--ink-dim); font-size:.85rem;">　直近{cur["W"]}回の間隔分布で理論との差 z={info["z"]:+.2f}'
-            f'　／　該当 <b style="color:var(--ink);">{len(cands)}個</b>'
-            f'{f"　／　経過回数 {lo}〜{hi}回" if cands else ""}</span></div>'
-            f'<div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(78px,1fr)); gap:6px;">{cells}</div>'
-        )
+        for area, _ in GAP_AREAS:
+            cands = [(k, e) for k, e in info["cands"] if area == "all" or gap_area_of(k) == area]
+            cells = "".join(
+                f'<div style="border:1px solid var(--rule); border-top:3px solid var(--area-{gap_area_of(k)}); border-radius:8px; padding:6px 4px; text-align:center; background:var(--surface-2);">'
+                f'<div style="font-family:\'IBM Plex Mono\',monospace; font-weight:600; font-size:1.05rem; color:var(--accent);">{k}</div>'
+                f'<div style="font-size:.72rem; color:var(--ink-dim); font-variant-numeric:tabular-nums;">{e}回</div></div>'
+                for k, e in cands
+            ) or '<p style="color:var(--ink-dim); margin:0;">このエリアに該当する番号はありません</p>'
+            lo, hi = (min(e for _, e in cands), max(e for _, e in cands)) if cands else (0, 0)
+            strong_n = '<b style="color:var(--ink);">' + str(len(cands)) + '個</b>'
+            if area == "all":
+                count_txt = "　／　該当 " + strong_n
+            else:
+                count_txt = f"　／　エリア {area_label[area]}：{strong_n}（区間全体 {len(info['cands'])}個中）"
+            range_txt = f"　／　経過回数 {lo}〜{hi}回" if cands else ""
+            out[(kind, area)] = (
+                f'<div style="margin-bottom:10px;"><b style="font-size:1rem;">{name}区間：{info["label"]}回</b>'
+                f'<span style="color:var(--ink-dim); font-size:.85rem;">　直近{cur["W"]}回の間隔分布で理論との差 z={info["z"]:+.2f}'
+                f'{count_txt}{range_txt}</span></div>'
+                f'<div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(78px,1fr)); gap:6px;">{cells}</div>'
+            )
     return out
 
 
@@ -1494,6 +1509,10 @@ def main():
     from gap_interval import run as gap_run
     gap_res = gap_run(conn)
     gap_pickup = gap_filtered_pickup_html(gap_res)
+    gap_blocks = "".join(
+        f'<div id="gapblk-{k}-{a}" style="display:{"block" if (k, a) == ("strong", "all") else "none"};">{h}</div>'
+        for (k, a), h in gap_pickup.items()
+    )
 
     # デフォルト表示（フィルタなし）
     if today_pickup_group:
@@ -1657,10 +1676,13 @@ def main():
       event.target.closest('.mode-btn').classList.add('is-active');
     }}
 
-    function switchGapFilter(kind) {{
-      ['strong', 'weak'].forEach(k => document.getElementById('gap-filter-' + k).style.display = k === kind ? 'block' : 'none');
-      document.querySelectorAll('.gap-filter-btn').forEach(btn => btn.classList.remove('is-active'));
-      event.target.classList.add('is-active');
+    var gapState = {{kind: 'strong', area: 'all'}};
+    function setGap(which, value, btn) {{
+      gapState[which] = value;
+      document.querySelectorAll('[id^="gapblk-"]').forEach(el => el.style.display = 'none');
+      document.getElementById('gapblk-' + gapState.kind + '-' + gapState.area).style.display = 'block';
+      document.querySelectorAll(which === 'kind' ? '.gap-kind-btn' : '.gap-area-btn').forEach(b => b.classList.remove('is-active'));
+      btn.classList.add('is-active');
     }}
 
     function switchAreaFilter(window_type) {{
@@ -1679,12 +1701,18 @@ def main():
       </div>
     </div>
     <div class="section-body" id="pickup-gap">
-      <div style="display:flex; gap:6px; margin-bottom:12px; border-bottom:1px solid var(--rule); padding-bottom:8px;">
-        <button class="gap-filter-btn area-filter-btn is-active" onclick="switchGapFilter('strong')">強い区間</button>
-        <button class="gap-filter-btn area-filter-btn" onclick="switchGapFilter('weak')">弱い区間</button>
+      <div style="display:flex; gap:6px; margin-bottom:8px; flex-wrap:wrap;">
+        <button class="gap-kind-btn area-filter-btn is-active" onclick="setGap('kind','strong',this)">強い区間</button>
+        <button class="gap-kind-btn area-filter-btn" onclick="setGap('kind','weak',this)">弱い区間</button>
       </div>
-      <div id="gap-filter-strong" style="display:block;">{gap_pickup["strong"]}</div>
-      <div id="gap-filter-weak" style="display:none;">{gap_pickup["weak"]}</div>
+      <div style="display:flex; gap:6px; margin-bottom:12px; border-bottom:1px solid var(--rule); padding-bottom:8px; flex-wrap:wrap; align-items:center;">
+        <span style="font-size:.8rem; color:var(--ink-dim);">エリア</span>
+        <button class="gap-area-btn area-filter-btn is-active" onclick="setGap('area','all',this)">すべて</button>
+        <button class="gap-area-btn area-filter-btn" onclick="setGap('area','1',this)"><span style="color:var(--area-1);">●</span> 000〜333</button>
+        <button class="gap-area-btn area-filter-btn" onclick="setGap('area','2',this)"><span style="color:var(--area-2);">●</span> 334〜666</button>
+        <button class="gap-area-btn area-filter-btn" onclick="setGap('area','3',this)"><span style="color:var(--area-3);">●</span> 667〜999</button>
+      </div>
+      {gap_blocks}
       <div style="margin-top:12px; padding:10px; background:color-mix(in srgb, var(--ink-mute) 10%, transparent); border-radius:4px; font-size:.85rem; color:var(--ink-dim);">
         次に当たると、その番号の再当せん間隔がこの区間になる番号の一覧です（通常ピックアップの条件は使っていません）。検証では、強い／弱い区間の近くの番号が次回当たりやすい証拠はありませんでした（的中は理論値と区別できず）。
         当たる確率は、どの番号も 1/1000 です。この版は履行履歴には記録されません。

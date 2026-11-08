@@ -940,6 +940,67 @@ def area_analysis_html(area_stats_by_periods: dict) -> str:
 </section>"""
 
 
+def theory_vs_actual_html(conn) -> str:
+    """手法別「理論値 vs 実績」検定セクション（全履歴・カイ二乗検定・Bonferroni補正）。"""
+    from theory_vs_actual import run
+    res = run(conn)
+    badge = {
+        0: ("理論値の範囲内", "var(--ink-dim)"),
+        1: ("補正前のみ有意", "var(--accent)"),
+        2: ("有意（補正後）", "var(--area-2)"),
+    }
+    items = []
+    for t in res["tests"]:
+        label, color = badge[t["level"]]
+        mx = max(max(r["obs_pct"], r["exp_pct"]) for r in t["rows"]) or 1
+        trs = []
+        for r in t["rows"]:
+            trs.append(
+                f'<tr><td style="padding:3px 8px;">{r["label"]}</td>'
+                f'<td style="padding:3px 8px; width:55%;">'
+                f'<div style="height:8px; width:{r["obs_pct"] / mx * 100:.1f}%; background:var(--accent); border-radius:2px;"></div>'
+                f'<div style="height:4px; margin-top:2px; width:{r["exp_pct"] / mx * 100:.1f}%; background:var(--ink-mute); border-radius:2px;"></div></td>'
+                f'<td style="padding:3px 8px; text-align:right; font-variant-numeric:tabular-nums;">{r["obs_pct"]:.2f}%</td>'
+                f'<td style="padding:3px 8px; text-align:right; color:var(--ink-dim); font-variant-numeric:tabular-nums;">{r["exp_pct"]:.2f}%</td></tr>'
+            )
+        items.append(
+            f'<details style="border-top:1px solid var(--rule); padding:8px 0;">'
+            f'<summary style="cursor:pointer; display:flex; gap:10px; align-items:baseline; flex-wrap:wrap;">'
+            f'<span style="font-weight:600; min-width:150px;">{t["name"]}</span>'
+            f'<span style="font-size:.82rem; color:var(--ink-dim); font-variant-numeric:tabular-nums;">'
+            f'χ²={t["chi2"]:.1f} / df={t["df"]} / p={t["p"]:.3f}</span>'
+            f'<span style="font-size:.82rem; font-weight:600; color:{color};">{label}</span></summary>'
+            f'<p style="margin:6px 0; font-size:.82rem; color:var(--ink-dim);">{t["note"]}'
+            f'（上段=実績 / 下段=理論、n={t["n"]}）</p>'
+            f'<table style="width:100%; border-collapse:collapse; font-size:.82rem;">'
+            f'<tr style="color:var(--ink-mute);"><th style="text-align:left; padding:3px 8px;">区分</th><th></th>'
+            f'<th style="text-align:right; padding:3px 8px;">実績</th><th style="text-align:right; padding:3px 8px;">理論</th></tr>'
+            f'{"".join(trs)}</table></details>'
+        )
+    sig2 = sum(1 for t in res["tests"] if t["level"] == 2)
+    sig1 = sum(1 for t in res["tests"] if t["level"] == 1)
+    return f"""<section class="section">
+  <div class="section-head">
+    <div>
+      <h2>手法別 理論値 vs 実績</h2>
+      <p>予想サイトで使われる手法が「偏り」と呼ぶものは、本当に理論値から外れているか（全{res["n"]}回・カイ二乗検定）</p>
+    </div>
+  </div>
+  <div class="section-body">
+    <p style="margin:0 0 10px; font-size:.9rem;">
+      {res["m"]}手法を検定: 補正後に有意 <b>{sig2}</b>件 / 補正前のみ有意 <b>{sig1}</b>件 / 理論値の範囲内 <b>{res["m"] - sig1 - sig2}</b>件
+      （同時に{res["m"]}件を検定するため有意水準は 0.05/{res["m"]}≒{res["threshold"]:.4f}。
+      有意水準5%でも{res["m"]}件中およそ{res["m"] * 0.05:.1f}件は偶然で有意になります）
+    </p>
+    {"".join(items)}
+    <div style="margin-top:14px; padding:10px; background:color-mix(in srgb, var(--ink-mute) 10%, transparent); border-radius:4px; font-size:.85rem; color:var(--ink-dim);">
+      理論分布は「各桁が独立に一様ランダム」として000〜999（引っ張り等は連続2回の全10<sup>6</sup>通り）を厳密に列挙して算出。
+      実績が理論値と整合する＝過去の偏りに次回を予測する力はありません。ナンバーズの賞金は固定額のため、どの番号を選んでも期待値は同じです。
+    </div>
+  </div>
+</section>"""
+
+
 def popularity_database_html(conn) -> str:
     """人気度データベースセクションを生成"""
     try:
@@ -1192,6 +1253,7 @@ def main():
 
     # 人気度データベースセクションを生成
     popularity_db_section = popularity_database_html(conn)
+    theory_section = theory_vs_actual_html(conn)
 
     pickup_summary = pickup_summary_html(pickup_groups) + pickup_offset_html(conn)
     pickup_history_visible = [pickup_card_html(g) for g in pickup_groups[1:1 + PICKUP_VISIBLE]]
@@ -1224,6 +1286,8 @@ def main():
   {area_heatmap_section}
 
   {area_streak_section}
+
+  {theory_section}
 
   {popularity_db_section}
 

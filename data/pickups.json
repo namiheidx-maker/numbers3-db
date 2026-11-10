@@ -988,5 +988,14 @@
     "win_count": 5,
     "avg_interval": 541.75,
     "draws_elapsed": 3675
+  },
+  {
+    "based_on_draw_no": 7110,
+    "rank": 1,
+    "number": "111",
+    "box_key": "111",
+    "win_count": 4,
+    "avg_interval": 1378.3333333333333,
+    "draws_elapsed": 2499
   }
 ]

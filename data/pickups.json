@@ -1006,5 +1006,32 @@
     "win_count": 6,
     "avg_interval": 729.6,
     "draws_elapsed": 3428
+  },
+  {
+    "based_on_draw_no": 7112,
+    "rank": 1,
+    "number": "883",
+    "box_key": "388",
+    "win_count": 7,
+    "avg_interval": 492.0,
+    "draws_elapsed": 3459
+  },
+  {
+    "based_on_draw_no": 7112,
+    "rank": 2,
+    "number": "333",
+    "box_key": "333",
+    "win_count": 6,
+    "avg_interval": 729.6,
+    "draws_elapsed": 3429
+  },
+  {
+    "based_on_draw_no": 7112,
+    "rank": 3,
+    "number": "383",
+    "box_key": "338",
+    "win_count": 6,
+    "avg_interval": 1079.2,
+    "draws_elapsed": 1658
   }
 ]

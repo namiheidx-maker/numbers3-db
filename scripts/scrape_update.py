@@ -29,7 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from db_common import connect, get_max_draw_no, upsert_draws
 
 BASE = "https://numbers-renban.tokyo"
-LIST_URL = BASE + "/numbers3/result_all"
+LIST_URL = BASE + "/numbers3/results"
 DETAIL_URL = BASE + "/numbers3/result/{draw_no}"
 UA = "Mozilla/5.0 (compatible; numbers3-db-collector/1.0; personal use)"
 REQUEST_INTERVAL_SEC = 1.0
@@ -41,8 +41,47 @@ def fetch(url: str, params: dict | None = None) -> str:
     return resp.text
 
 
+def _blank_row(draw_no, draw_date, number, straight_amount):
+    return {
+        "draw_no": draw_no, "draw_date": draw_date, "number": number,
+        "straight_count": None, "straight_amount": straight_amount,
+        "box_count": None, "box_amount": None,
+        "set_straight_count": None, "set_straight_amount": None,
+        "set_box_count": None, "set_box_amount": None,
+        "mini_number": None, "mini_count": None, "mini_amount": None,
+        "source": "scrape",
+    }
+
+
+def parse_list_page_v2(soup) -> list[dict]:
+    """2026-11 以降の Next.js 版レイアウト（div.result-row）。口数は一覧に無いため None。"""
+    rows = []
+    for div in soup.select("div.result-row"):
+        no_a = div.select_one("a.result-row__no")
+        num_a = div.select_one("a.result-row__number")
+        date_s = div.select_one("span.result-row__date")
+        if not (no_a and num_a and date_s):
+            continue
+        m = re.search(r"(\d+)", no_a.get_text())
+        dm = re.search(r"(\d{4}-\d{2}-\d{2})", date_s.get_text())
+        number = num_a.get_text(strip=True)
+        if not (m and dm and re.fullmatch(r"\d{3}", number)):
+            continue
+        amount = None
+        prize = div.select_one("span.result-row__prize")
+        if prize:
+            am = re.search(r"([\d,]+)", prize.get_text())
+            if am:
+                amount = int(am.group(1).replace(",", ""))
+        rows.append(_blank_row(int(m.group(1)), dm.group(1), number, amount))
+    return rows
+
+
 def parse_list_page(html: str) -> list[dict]:
     soup = BeautifulSoup(html, "html.parser")
+    v2 = parse_list_page_v2(soup)
+    if v2:
+        return v2
     rows = []
     for tr in soup.select("table.table-striped tr"):
         link = tr.select_one("a.tdu[href*='/numbers3/result/']")
@@ -160,6 +199,9 @@ def scrape_list(stop_at_draw_no: int, full: bool) -> list[dict]:
         if not rows:
             break
         new_rows = [r for r in rows if full or r["draw_no"] > stop_at_draw_no]
+        if not full and len(new_rows) == len(rows) and stop_at_draw_no and len(rows) < 100:
+            print(f"警告: 一覧の1ページ（{len(rows)}回分）に既存データの回号が含まれません。"
+                  f"第{stop_at_draw_no + 1}回〜第{min(r['draw_no'] for r in rows) - 1}回が欠落している可能性があります。")
         collected.extend(new_rows)
         if not full and len(new_rows) < len(rows):
             break

@@ -1636,5 +1636,41 @@
     "win_count": 4,
     "avg_interval": 1378.3333333333333,
     "draws_elapsed": 2510
+  },
+  {
+    "based_on_draw_no": 7122,
+    "rank": 1,
+    "number": "005",
+    "box_key": "005",
+    "win_count": 7,
+    "avg_interval": 744.5,
+    "draws_elapsed": 1751
+  },
+  {
+    "based_on_draw_no": 7122,
+    "rank": 2,
+    "number": "505",
+    "box_key": "055",
+    "win_count": 6,
+    "avg_interval": 884.6,
+    "draws_elapsed": 1713
+  },
+  {
+    "based_on_draw_no": 7122,
+    "rank": 3,
+    "number": "000",
+    "box_key": "000",
+    "win_count": 6,
+    "avg_interval": 1056.4,
+    "draws_elapsed": 1494
+  },
+  {
+    "based_on_draw_no": 7122,
+    "rank": 4,
+    "number": "050",
+    "box_key": "005",
+    "win_count": 6,
+    "avg_interval": 814.6,
+    "draws_elapsed": 1274
   }
 ]
